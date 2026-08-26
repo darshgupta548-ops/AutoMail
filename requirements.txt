@@ -1,0 +1,8 @@
+Flask
+python-dotenv
+requests
+cloudinary
+google-genai
+resend
+pydantic
+pytest
