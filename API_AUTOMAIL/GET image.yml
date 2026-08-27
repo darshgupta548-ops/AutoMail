@@ -1,0 +1,27 @@
+info:
+  name: GET image
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: http://localhost:5000/api/jobs
+  body:
+    type: json
+    data: |-
+      {
+        "event_name": "HELIOTRACK 2.0",
+        "event_date": "2026-10-11",
+        "event_start_time": "10:00",
+        "event_end_time": "16:00",
+        "event_description": "An astronomy event.",
+        "event_whatsapp_message": "Join us...",
+        "event_poster": "https://example.com/poster.jpg"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

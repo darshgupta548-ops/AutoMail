@@ -388,3 +388,7 @@ AUTO-MAIL uses external services for infrastructure that is not the purpose of t
 ## Persistence
 
 AUTO-MAIL persists email-generation jobs with Flask-SQLAlchemy and SQLite. The local database is created in Flask's instance/automail.db path and is not committed to Git.
+
+### Cloudinary Asset Uploads
+
+Flask routes poster and background image uploads through the Asset Service. The service uses Cloudinary and stores only its secure HTTPS URLs in the corresponding EmailJob fields.

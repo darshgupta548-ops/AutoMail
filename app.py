@@ -7,6 +7,7 @@ from flask import Flask, jsonify, request
 
 from extensions import db
 from models.email_job import EmailJob, JobStatus
+from services import asset_service
 
 
 def _parse_date(value):
@@ -43,16 +44,15 @@ def _validate_job_payload(payload):
         raise ValueError("status must be one of the defined workflow states.")
 
     end_time = payload.get("event_end_time")
-    if end_time in (None, ""):
-        end_time = None
-    else:
-        end_time = _parse_time(end_time, "event_end_time")
+    end_time = None if end_time in (None, "") else _parse_time(end_time, "event_end_time")
 
     return {
         "event_name": _required_text(payload, "event_name"),
         "event_date": _parse_date(payload.get("event_date")),
         "event_start_time": _parse_time(payload.get("event_start_time"), "event_start_time"),
         "event_end_time": end_time,
+        "event_venue": payload.get("event_venue"),
+        "registration_url": payload.get("registration_url"),
         "event_description": _required_text(payload, "event_description"),
         "event_whatsapp_message": payload.get("event_whatsapp_message"),
         "email_context": payload.get("email_context"),
@@ -77,7 +77,6 @@ def create_app(test_config=None):
 
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     db.init_app(app)
-
     with app.app_context():
         db.create_all()
 
@@ -87,19 +86,48 @@ def create_app(test_config=None):
 
     @app.post("/api/jobs")
     def create_job():
-        payload = request.get_json(silent=True)
         try:
-            values = _validate_job_payload(payload)
+            values = _validate_job_payload(request.get_json(silent=True))
         except ValueError as error:
             return jsonify(success=False, error=str(error)), 400
 
         job = EmailJob(**values)
         db.session.add(job)
         db.session.commit()
+        return jsonify(success=True, job={"id": job.id, "event_name": job.event_name, "status": job.status}), 201
+
+    @app.post("/api/jobs/<int:job_id>/assets")
+    def upload_job_assets(job_id):
+        job = db.session.get(EmailJob, job_id)
+        if job is None:
+            return jsonify(success=False, error="Email job not found."), 404
+
+        poster = request.files.get("poster")
+        background = request.files.get("background")
+        if not any(file and file.filename for file in (poster, background)):
+            return jsonify(success=False, error="Provide a poster or background image."), 400
+
+        try:
+            poster_url = asset_service.upload_poster(poster) if poster and poster.filename else None
+            background_url = (
+                asset_service.upload_background(background)
+                if background and background.filename
+                else None
+            )
+        except asset_service.InvalidAssetError as error:
+            return jsonify(success=False, error=str(error)), 400
+        except asset_service.AssetServiceError as error:
+            return jsonify(success=False, error=str(error)), 502
+
+        if poster_url:
+            job.event_poster = poster_url
+        if background_url:
+            job.email_bg = background_url
+        db.session.commit()
         return jsonify(
             success=True,
-            job={"id": job.id, "event_name": job.event_name, "status": job.status},
-        ), 201
+            assets={"poster_url": poster_url, "background_url": background_url},
+        )
 
     @app.get("/api/jobs/<int:job_id>")
     def get_job(job_id):

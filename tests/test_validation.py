@@ -40,19 +40,30 @@ def test_app_starts_and_database_initializes(app, client):
         assert EmailJob.__table__.name in db.inspect(db.engine).get_table_names()
 
 
-def test_create_and_retrieve_job(client, job_payload):
+def test_create_and_retrieve_job_with_omitted_optional_fields(client, job_payload):
     created = client.post("/api/jobs", json=job_payload)
     assert created.status_code == 201
     created_job = created.get_json()["job"]
     assert created_job["id"]
     assert created_job["status"] == "DRAFT"
 
-    fetched = client.get(f"/api/jobs/{created_job['id']}")
-    assert fetched.status_code == 200
-    job = fetched.get_json()["job"]
+    job = client.get(f"/api/jobs/{created_job['id']}").get_json()["job"]
     assert job["event_name"] == job_payload["event_name"]
     assert job["event_date"] == "2026-10-11"
     assert job["event_start_time"] == "10:00:00"
+    assert job["event_venue"] is None
+    assert job["registration_url"] is None
+
+
+def test_optional_venue_and_registration_url_round_trip(client, job_payload):
+    job_payload.update(
+        event_venue="PDEU Astronomy Observatory",
+        registration_url="https://example.com/register/heliotrack-2",
+    )
+    job_id = client.post("/api/jobs", json=job_payload).get_json()["job"]["id"]
+    job = client.get(f"/api/jobs/{job_id}").get_json()["job"]
+    assert job["event_venue"] == job_payload["event_venue"]
+    assert job["registration_url"] == job_payload["registration_url"]
 
 
 def test_list_jobs(client, job_payload):

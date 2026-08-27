@@ -88,4 +88,9 @@ A user can go from poster + event information to approved, tested, and delivered
 
 ## Persistence
 
-Each email-generation workflow is persisted as an email job, including its input details, workflow status, generated structured context, visual settings, and final HTML when later phases produce them.
+Each email-generation workflow is persisted as an email job, including its input details, optional event venue and registration URL, workflow status, generated structured context, visual settings, and final HTML when later phases produce them.
+
+### Email Job Fields
+
+- `event_venue`: optional `String(300)` venue for the event.
+- `registration_url`: optional `String(1000)` registration link for the event.

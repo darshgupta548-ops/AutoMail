@@ -159,4 +159,12 @@ AutoMail/
 
 ## 8. Database Layer
 
-Flask-SQLAlchemy persists each email-generation workflow in SQLite's mail_jobs table. The database is local to the Flask instance directory; it stores workflow state and generation artifacts without implementing external-service behavior.
+Flask-SQLAlchemy persists each email-generation workflow in SQLite's `email_jobs` table. The database is local to the Flask instance directory; it stores workflow state and generation artifacts without implementing external-service behavior.
+
+## Asset Upload Flow
+
+The asset API receives a user upload in Flask, validates it through the Asset Service, uploads it to Cloudinary, and persists only the returned HTTPS URL on the matching EmailJob (`event_poster` or `email_bg`).
+
+```text
+User upload → Flask → Asset Service → Cloudinary → HTTPS URL → EmailJob
+```

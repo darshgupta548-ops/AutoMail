@@ -24,15 +24,8 @@ class JobStatus:
     FINAL_SENT = "FINAL_SENT"
 
     ALL = (
-        DRAFT,
-        ASSETS_READY,
-        CONTEXT_GENERATED,
-        CONTEXT_APPROVED,
-        EMAIL_RENDERED,
-        EMAIL_APPROVED,
-        TEST_SENT,
-        TEST_APPROVED,
-        FINAL_SENT,
+        DRAFT, ASSETS_READY, CONTEXT_GENERATED, CONTEXT_APPROVED,
+        EMAIL_RENDERED, EMAIL_APPROVED, TEST_SENT, TEST_APPROVED, FINAL_SENT,
     )
 
 
@@ -46,6 +39,8 @@ class EmailJob(db.Model):
     event_date = db.Column(db.Date, nullable=False)
     event_start_time = db.Column(db.Time, nullable=False)
     event_end_time = db.Column(db.Time, nullable=True)
+    event_venue = db.Column(db.String(300), nullable=True)
+    registration_url = db.Column(db.String(1000), nullable=True)
     event_description = db.Column(db.Text, nullable=False)
     event_whatsapp_message = db.Column(db.Text, nullable=True)
     email_context = db.Column(db.JSON, nullable=True)
@@ -56,12 +51,7 @@ class EmailJob(db.Model):
     email_html = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(30), nullable=False, default=JobStatus.DRAFT)
     created_at = db.Column(db.DateTime, nullable=False, default=_utcnow)
-    updated_at = db.Column(
-        db.DateTime,
-        nullable=False,
-        default=_utcnow,
-        onupdate=_utcnow,
-    )
+    updated_at = db.Column(db.DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 
     def to_dict(self):
         """Return a JSON-ready representation of this job."""
@@ -71,6 +61,8 @@ class EmailJob(db.Model):
             "event_date": self.event_date.isoformat(),
             "event_start_time": self.event_start_time.isoformat(),
             "event_end_time": self.event_end_time.isoformat() if self.event_end_time else None,
+            "event_venue": self.event_venue,
+            "registration_url": self.registration_url,
             "event_description": self.event_description,
             "event_whatsapp_message": self.event_whatsapp_message,
             "email_context": self.email_context,
