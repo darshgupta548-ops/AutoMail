@@ -156,3 +156,7 @@ AutoMail/
 ├── generated/
 └── tests/
 ```
+
+## 8. Database Layer
+
+Flask-SQLAlchemy persists each email-generation workflow in SQLite's mail_jobs table. The database is local to the Flask instance directory; it stores workflow state and generation artifacts without implementing external-service behavior.

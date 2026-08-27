@@ -15,3 +15,5 @@ generated/*
 
 .DS_Store
 Thumbs.db
+instance/
+*.db

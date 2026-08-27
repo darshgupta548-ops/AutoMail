@@ -6,3 +6,4 @@ google-genai
 resend
 pydantic
 pytest
+Flask-SQLAlchemy

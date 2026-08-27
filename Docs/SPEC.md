@@ -85,3 +85,7 @@ Bulk mailing; student/contact database; analytics; campaign scheduling; drag-and
 
 ## 12. Success Criteria
 A user can go from poster + event information to approved, tested, and delivered IT/Admin email through one coherent workflow.
+
+## Persistence
+
+Each email-generation workflow is persisted as an email job, including its input details, workflow status, generated structured context, visual settings, and final HTML when later phases produce them.

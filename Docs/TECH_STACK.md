@@ -384,3 +384,7 @@ HTML / CSS / JS
 AUTO-MAIL uses external services for infrastructure that is not the purpose of the project, while keeping the central intelligence and rendering workflow under application control.
 
 > **Use APIs for infrastructure. Build the product logic yourself.**
+
+## Persistence
+
+AUTO-MAIL persists email-generation jobs with Flask-SQLAlchemy and SQLite. The local database is created in Flask's instance/automail.db path and is not committed to Git.
