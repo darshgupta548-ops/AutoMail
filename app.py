@@ -7,7 +7,7 @@ from flask import Flask, jsonify, request
 
 from extensions import db
 from models.email_job import EmailJob, JobStatus
-from services import asset_service
+from services import asset_service, sense_maker
 
 
 def _parse_date(value):
@@ -109,11 +109,7 @@ def create_app(test_config=None):
 
         try:
             poster_url = asset_service.upload_poster(poster) if poster and poster.filename else None
-            background_url = (
-                asset_service.upload_background(background)
-                if background and background.filename
-                else None
-            )
+            background_url = asset_service.upload_background(background) if background and background.filename else None
         except asset_service.InvalidAssetError as error:
             return jsonify(success=False, error=str(error)), 400
         except asset_service.AssetServiceError as error:
@@ -124,9 +120,29 @@ def create_app(test_config=None):
         if background_url:
             job.email_bg = background_url
         db.session.commit()
+        return jsonify(success=True, assets={"poster_url": poster_url, "background_url": background_url})
+
+    @app.post("/api/jobs/<int:job_id>/context/generate")
+    def generate_job_context(job_id):
+        job = db.session.get(EmailJob, job_id)
+        if job is None:
+            return jsonify(success=False, error="Email job not found."), 404
+
+        try:
+            context = sense_maker.generate_email_context(job)
+        except sense_maker.SenseMakerValidationError as error:
+            return jsonify(success=False, error=str(error)), 400
+        except sense_maker.SenseMakerError as error:
+            return jsonify(success=False, error=str(error)), 502
+
+        job.email_context = context
+        job.status = JobStatus.CONTEXT_GENERATED
+        db.session.commit()
         return jsonify(
             success=True,
-            assets={"poster_url": poster_url, "background_url": background_url},
+            job_id=job.id,
+            status=job.status,
+            email_context=context,
         )
 
     @app.get("/api/jobs/<int:job_id>")

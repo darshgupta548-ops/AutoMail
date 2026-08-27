@@ -168,3 +168,11 @@ The asset API receives a user upload in Flask, validates it through the Asset Se
 ```text
 User upload → Flask → Asset Service → Cloudinary → HTTPS URL → EmailJob
 ```
+
+## Sense Maker Output
+
+Sense Maker receives persisted EmailJob facts and the optional hosted poster, calls Gemini, and stores only a structured email_context JSON object. It produces content only; it does not generate HTML, CSS, Markdown, or email templates. The generated context proceeds to human review before the Email Maker stage.
+
+```text
+EmailJob → Sense Maker → Gemini → Structured email_context → Human Review → Email Maker
+```

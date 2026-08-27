@@ -1,0 +1,23 @@
+info:
+  name: CONTEXT GENERATOR
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: http://localhost:5000/api/jobs/1/assets
+  body:
+    type: multipart-form
+    data:
+      - name: poster
+        type: file
+        value:
+          - C:\Users\Administrator\Pictures\DN.jpg
+        contentType: image/jpeg
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

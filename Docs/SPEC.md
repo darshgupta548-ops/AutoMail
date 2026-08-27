@@ -94,3 +94,7 @@ Each email-generation workflow is persisted as an email job, including its input
 
 - `event_venue`: optional `String(300)` venue for the event.
 - `registration_url`: optional `String(1000)` registration link for the event.
+
+### Sense Maker Persistence
+
+The context-generation API supplies EmailJob event data and, when available, the stored Cloudinary poster to Sense Maker. Gemini returns a validated structured email_context that is stored on the job with status CONTEXT_GENERATED. Sense Maker creates content only and never generates HTML.
