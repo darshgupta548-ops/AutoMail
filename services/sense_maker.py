@@ -12,6 +12,12 @@ from models.email_context import EmailContext
 
 
 GEMINI_MODEL = "gemini-3.6-flash"
+
+DEFAULT_ORGANIZATION_LOGOS = {
+    "brahmand_logo_url": "https://res.cloudinary.com/vmt4lznh/image/upload/v1787948490/Brahmand_Logo_-_Black_PNG.png",
+    "snt_logo_url": "https://res.cloudinary.com/vmt4lznh/image/upload/v1787948490/sntlogo.png",
+    "osail_logo_url": "https://res.cloudinary.com/vmt4lznh/image/upload/v1787948489/Osail_black_logo.png",
+}
 CLOUDINARY_HOST = "res.cloudinary.com"
 GEMINI_RESPONSE_SCHEMA = {
     "type": "object",
@@ -155,7 +161,10 @@ def generate_email_context(job):
             },
         )
         generated = response.parsed if response.parsed is not None else json.loads(response.text)
-        return EmailContext.model_validate(generated).model_dump(mode="json")
+        generated = dict(generated)
+        for field_name, url in DEFAULT_ORGANIZATION_LOGOS.items():
+            generated.setdefault(field_name, url)
+        return EmailContext.model_validate(generated).model_dump(mode="json", exclude_defaults=True)
     except (ValueError, TypeError, json.JSONDecodeError) as error:
         raise SenseMakerError("Gemini returned an invalid email context.") from error
     except Exception as error:

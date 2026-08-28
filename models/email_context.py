@@ -1,6 +1,6 @@
 """Pydantic contract for structured Sense Maker output."""
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EmailSection(BaseModel):
@@ -46,3 +46,10 @@ class EmailContext(BaseModel):
     event_details: EventDetails
     cta: CallToAction
     closing: str
+    contact_details: list[str] = Field(default_factory=list)
+    # Named organization assets are persisted with the email context, not template code.
+    brahmand_logo_url: str | None = None
+    snt_logo_url: str | None = None
+    osail_logo_url: str | None = None
+    # Legacy compatibility for contexts created before the named fields existed.
+    logo_urls: dict[str, str] = Field(default_factory=dict)

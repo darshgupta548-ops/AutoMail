@@ -117,7 +117,7 @@ def test_missing_poster_uses_text_only_gemini_input(monkeypatch):
     response = SimpleNamespace(parsed=VALID_CONTEXT, text=None)
     with patch("services.sense_maker.genai.Client") as mock_client:
         mock_client.return_value.models.generate_content.return_value = response
-        assert sense_maker.generate_email_context(job) == VALID_CONTEXT
+        assert sense_maker.generate_email_context(job) == {**VALID_CONTEXT, **sense_maker.DEFAULT_ORGANIZATION_LOGOS}
 
     contents = mock_client.return_value.models.generate_content.call_args.kwargs["contents"]
     assert len(contents) == 1

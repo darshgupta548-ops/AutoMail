@@ -8,7 +8,7 @@ from flask import Flask, jsonify, render_template, request
 from extensions import db
 from models.email_context import EmailContext
 from models.email_job import EmailJob, JobStatus
-from services import asset_service, sense_maker
+from services import asset_service, email_maker, sense_maker
 
 
 def _parse_date(value):
@@ -162,7 +162,7 @@ def create_app(test_config=None):
         original_status = job.status
 
         try:
-            validated_context = EmailContext.model_validate(context_payload).model_dump(mode="json")
+            validated_context = EmailContext.model_validate(context_payload).model_dump(mode="json", exclude_defaults=True)
         except Exception as error:
             # Preserve original context and status on validation failure
             job.email_context = original_context
@@ -179,6 +179,94 @@ def create_app(test_config=None):
             status=job.status,
             email_context=validated_context,
         )
+
+    @app.post("/api/jobs/<int:job_id>/email/generate")
+    def generate_job_email(job_id):
+        job = db.session.get(EmailJob, job_id)
+        if job is None:
+            return jsonify(success=False, error="Email job not found."), 404
+
+        if job.status not in (JobStatus.CONTEXT_APPROVED, JobStatus.EMAIL_RENDERED):
+            return jsonify(success=False, error=f"Job must be in CONTEXT_APPROVED or EMAIL_RENDERED state to generate email. Current state: {job.status}"), 400
+
+        if not job.email_context:
+            return jsonify(success=False, error="Job has no approved context to render."), 400
+
+        # Store original email_html and status for rollback on rendering failure
+        original_email_html = job.email_html
+        original_status = job.status
+
+        # Inject organization logo URLs for existing jobs that don't have them
+        # This ensures legacy jobs receive the Brahmand email identity
+        context_with_logos = job.email_context.copy()
+        if not context_with_logos.get('brahmand_logo_url'):
+            context_with_logos['brahmand_logo_url'] = 'https://res.cloudinary.com/vmt4lznh/image/upload/v1787948490/Brahmand_Logo_-_Black_PNG.png'
+        if not context_with_logos.get('snt_logo_url'):
+            context_with_logos['snt_logo_url'] = 'https://res.cloudinary.com/vmt4lznh/image/upload/v1787948490/sntlogo.png'
+        if not context_with_logos.get('osail_logo_url'):
+            context_with_logos['osail_logo_url'] = 'https://res.cloudinary.com/vmt4lznh/image/upload/v1787948489/Osail_black_logo.png'
+
+        try:
+            html = email_maker.render_email(
+                context_with_logos,
+                poster_url=job.event_poster,
+                background_url=job.email_bg,
+            )
+        except email_maker.EmailMakerError as error:
+            # Preserve original email_html and status on rendering failure
+            job.email_html = original_email_html
+            job.status = original_status
+            db.session.commit()
+            return jsonify(success=False, error=f"Email rendering failed: {str(error)}"), 500
+
+        job.email_html = html
+        job.status = JobStatus.EMAIL_RENDERED
+        db.session.commit()
+        return jsonify(
+            success=True,
+            job_id=job.id,
+            status=job.status,
+            email_html=html,
+        )
+
+    @app.post("/api/jobs/<int:job_id>/email/approve")
+    def approve_job_email(job_id):
+        job = db.session.get(EmailJob, job_id)
+        if job is None:
+            return jsonify(success=False, error="Email job not found."), 404
+
+        if job.status != JobStatus.EMAIL_RENDERED:
+            return jsonify(success=False, error=f"Job must be in EMAIL_RENDERED state to approve email. Current state: {job.status}"), 400
+
+        job.status = JobStatus.EMAIL_APPROVED
+        db.session.commit()
+        return jsonify(
+            success=True,
+            job_id=job.id,
+            status=job.status,
+        )
+
+
+    @app.put("/api/jobs/<int:job_id>/email/content")
+    def update_job_email_content(job_id):
+        """Persist a human edit and re-render without changing workflow state."""
+        job = db.session.get(EmailJob, job_id)
+        if job is None:
+            return jsonify(success=False, error="Email job not found."), 404
+        if job.status != JobStatus.EMAIL_RENDERED:
+            return jsonify(success=False, error=f"Job must be in EMAIL_RENDERED state to edit email. Current state: {job.status}"), 400
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify(success=False, error="Request body must be a JSON object."), 400
+        try:
+            context = EmailContext.model_validate(payload).model_dump(mode="json", exclude_defaults=True)
+            html = email_maker.render_email(context, poster_url=job.event_poster, background_url=job.email_bg)
+        except Exception as error:
+            return jsonify(success=False, error=f"Invalid email content: {str(error)}"), 400
+        job.email_context = context
+        job.email_html = html
+        db.session.commit()
+        return jsonify(success=True, job_id=job.id, status=job.status, email_context=context, email_html=html)
 
     @app.get("/api/jobs/<int:job_id>")
     def get_job(job_id):

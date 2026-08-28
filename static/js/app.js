@@ -24,7 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     dashboard: document.getElementById('view-dashboard'),
     create: document.getElementById('view-create'),
     contextReview: document.getElementById('view-context-review'),
-    pipelinePreview: document.getElementById('view-pipeline-preview')
+    pipelinePreview: document.getElementById('view-pipeline-preview'),
+    emailReview: document.getElementById('view-email-review')
   };
 
   const navLinks = {
@@ -65,6 +66,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCancelRegen = document.getElementById('btn-cancel-regen');
   const btnConfirmRegen = document.getElementById('btn-confirm-regen');
   const btnPipelineReturn = document.getElementById('btn-pipeline-return');
+
+  
+  // Email Review Elements
+  const emailPreviewIframe = document.getElementById('email-preview-iframe');
+  const btnViewportDesktop = document.getElementById('btn-viewport-desktop');
+  const btnViewportMobile = document.getElementById('btn-viewport-mobile');
+  const emailIframeWrapper = document.getElementById('email-iframe-wrapper');
+  
+  const telemetrySubject = document.getElementById('telemetry-subject');
+  const telemetryPreheader = document.getElementById('telemetry-preheader');
+  const telemetryPoster = document.getElementById('telemetry-poster');
+  const telemetryBg = document.getElementById('telemetry-bg');
+  const telemetrySections = document.getElementById('telemetry-sections');
+  const telemetryCta = document.getElementById('telemetry-cta');
+  
+  const btnRegenEmail = document.getElementById('btn-regen-email');
+  const btnApproveEmail = document.getElementById('btn-approve-email');
 
   // =========================================================================
   // TOAST NOTIFICATIONS & TELEMETRY LOADER
@@ -188,6 +206,22 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // =========================================================================
+  
+  async function apiGenerateEmail(jobId) {
+    const res = await fetch(`/api/jobs/${jobId}/email/generate`, {
+      method: 'POST'
+    });
+    return await res.json();
+  }
+
+  async function apiApproveEmail(jobId) {
+    const res = await fetch(`/api/jobs/${jobId}/email/approve`, {
+      method: 'POST'
+    });
+    return await res.json();
+  }
+
+  // =========================================================================
   // DASHBOARD RENDERER
   // =========================================================================
   function getStatusBadgeHtml(status) {
@@ -246,7 +280,12 @@ document.addEventListener('DOMContentLoaded', () => {
         state.activeJob = data.job;
         updateTelemetryPill(data.job);
 
-        if (data.job.status === 'CONTEXT_GENERATED' || data.job.status === 'CONTEXT_APPROVED') {
+        if (data.job.status === 'EMAIL_RENDERED') {
+          populateEmailReview(data.job);
+          switchView('emailReview', 5);
+        } else if (data.job.status === 'EMAIL_APPROVED' || data.job.status.includes('TEST') || data.job.status.includes('FINAL')) {
+          switchView('pipelinePreview', 6);
+        } else if (data.job.status === 'CONTEXT_GENERATED' || data.job.status === 'CONTEXT_APPROVED') {
           populateContextEditor(data.job.email_context);
           switchView('contextReview', 3);
         } else {
@@ -541,8 +580,22 @@ document.addEventListener('DOMContentLoaded', () => {
       if (res.success) {
         state.activeJob.status = res.status;
         state.activeJob.email_context = res.email_context;
-        showToast('Context approved! Advancing to Email Build pipeline.');
-        switchView('pipelinePreview', 4);
+        
+        // NOW AUTO-GENERATE EMAIL
+        startTelemetryLoader(["RENDERING RESPONSIVE HTML..."]);
+        const emailRes = await apiGenerateEmail(state.activeJob.id);
+        stopTelemetryLoader();
+        
+        if (emailRes.success) {
+            state.activeJob.status = emailRes.status;
+            state.activeJob.email_html = emailRes.email_html;
+            showToast('Context approved and Email rendered! Advancing to Email Review.');
+            populateEmailReview(state.activeJob);
+            switchView('emailReview', 5);
+        } else {
+            showToast(`Email rendering failed: ${emailRes.error}`);
+            // Stay here or go to some error view
+        }
       } else {
         showToast(`Approval validation failed: ${res.error}`);
       }
@@ -590,6 +643,195 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('Error triggering context regeneration.');
     }
   });
+
+  
+
+  async function apiSaveEmailContent(jobId, contextPayload) {
+    const res = await fetch(`/api/jobs/${jobId}/email/content`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(contextPayload)
+    });
+    return await res.json();
+  }
+
+  function serializeEmailSections(sections) {
+    return (sections || []).map((section) => [section.heading, section.body, ...(section.bullets || [])].join('\n')).join('\n\n---\n\n');
+  }
+
+  function parseEmailSections(value) {
+    if (!value.trim()) return [];
+    return value.split(/\n\s*---\s*\n/).map((block) => {
+      const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
+      return { heading: lines.shift() || 'Section', body: lines.shift() || '', bullets: lines };
+    });
+  }
+
+  function openEmailEditor() {
+    const context = state.activeJob && state.activeJob.email_context;
+    if (!context) return;
+    document.getElementById('email-edit-subject').value = context.subject || '';
+    document.getElementById('email-edit-preheader').value = context.preheader || '';
+    document.getElementById('email-edit-headline').value = context.headline || '';
+    document.getElementById('email-edit-intro').value = context.intro || '';
+    document.getElementById('email-edit-date').value = context.event_details?.date || '';
+    document.getElementById('email-edit-time').value = context.event_details?.time || '';
+    document.getElementById('email-edit-venue').value = context.event_details?.venue || '';
+    document.getElementById('email-edit-cta-label').value = context.cta?.label || 'Register Now';
+    document.getElementById('email-edit-cta-url').value = context.cta?.url || context.event_details?.registration_url || '';
+    document.getElementById('email-edit-closing').value = context.closing || '';
+    document.getElementById('email-edit-contacts').value = (context.contact_details || []).join('\n');
+    document.getElementById('email-edit-sections').value = serializeEmailSections(context.sections);
+    document.getElementById('email-editor-panel').hidden = false;
+  }
+
+  document.getElementById('btn-edit-email').addEventListener('click', openEmailEditor);
+  document.getElementById('btn-cancel-email-edit').addEventListener('click', () => {
+    document.getElementById('email-editor-panel').hidden = true;
+  });
+  document.getElementById('email-content-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!state.activeJob) return;
+    const existing = state.activeJob.email_context;
+    const ctaUrl = document.getElementById('email-edit-cta-url').value.trim() || null;
+    const context = {
+      subject: document.getElementById('email-edit-subject').value.trim(),
+      preheader: document.getElementById('email-edit-preheader').value.trim(),
+      headline: document.getElementById('email-edit-headline').value.trim(),
+      intro: document.getElementById('email-edit-intro').value.trim(),
+      sections: parseEmailSections(document.getElementById('email-edit-sections').value),
+      event_details: {
+        date: document.getElementById('email-edit-date').value.trim(),
+        time: document.getElementById('email-edit-time').value.trim(),
+        venue: document.getElementById('email-edit-venue').value.trim() || null,
+        registration_url: existing.event_details?.registration_url || ctaUrl
+      },
+      cta: { label: document.getElementById('email-edit-cta-label').value.trim() || 'Register Now', url: ctaUrl },
+      closing: document.getElementById('email-edit-closing').value.trim(),
+      contact_details: document.getElementById('email-edit-contacts').value.split('\n').map((line) => line.trim()).filter(Boolean),
+      brahmand_logo_url: existing.brahmand_logo_url || null,
+      snt_logo_url: existing.snt_logo_url || null,
+      osail_logo_url: existing.osail_logo_url || null,
+      logo_urls: existing.logo_urls || {}
+    };
+    const result = await apiSaveEmailContent(state.activeJob.id, context);
+    if (!result.success) { showToast(`Save failed: ${result.error}`); return; }
+    state.activeJob.email_context = result.email_context;
+    state.activeJob.email_html = result.email_html;
+    state.activeJob.status = result.status;
+    document.getElementById('email-editor-panel').hidden = true;
+    populateEmailReview(state.activeJob);
+    showToast('Email changes saved.');
+  });
+
+  // =========================================================================
+  // STAGE 05: EMAIL REVIEW
+  // =========================================================================
+  function populateEmailReview(job) {
+    if (!job) return;
+    state.activeJob = job;
+
+    // Insert HTML into iframe safely
+    if (job.email_html) {
+      emailPreviewIframe.srcdoc = job.email_html;
+    } else {
+      emailPreviewIframe.srcdoc = "<html><body><p>Error: No HTML content found.</p></body></html>";
+    }
+
+    // Update Telemetry Panel
+    if (job.email_context) {
+      telemetrySubject.textContent = job.email_context.subject || 'N/A';
+      telemetryPreheader.textContent = job.email_context.preheader || 'N/A';
+      
+      const sectionCount = (job.email_context.sections || []).length;
+      telemetrySections.textContent = `SECTIONS ${sectionCount}`;
+      
+      telemetryCta.textContent = (job.email_context.cta && job.email_context.cta.label) ? 'CTA ENABLED' : 'CTA DISABLED';
+    }
+
+    if (job.event_poster) {
+      telemetryPoster.innerHTML = `POSTER <span class="t-ok">✓ LOADED</span>`;
+    } else {
+      telemetryPoster.innerHTML = `POSTER <span class="t-none">✓ / — NOT USED</span>`;
+    }
+
+    if (job.email_bg) {
+      telemetryBg.innerHTML = `BACKGROUND <span class="t-ok">✓ LOADED</span>`;
+    } else {
+      telemetryBg.innerHTML = `BACKGROUND <span class="t-none">✓ / — NOT USED</span>`;
+    }
+  }
+
+  // Viewport Controls
+  btnViewportDesktop.addEventListener('click', () => {
+    btnViewportDesktop.classList.add('active');
+    btnViewportMobile.classList.remove('active');
+    emailIframeWrapper.classList.add('desktop-mode');
+    emailIframeWrapper.classList.remove('mobile-mode');
+  });
+
+  btnViewportMobile.addEventListener('click', () => {
+    btnViewportMobile.classList.add('active');
+    btnViewportDesktop.classList.remove('active');
+    emailIframeWrapper.classList.add('mobile-mode');
+    emailIframeWrapper.classList.remove('desktop-mode');
+  });
+
+  // Regenerate Email Action
+  btnRegenEmail.addEventListener('click', async () => {
+    if (!state.activeJob) return;
+
+    startTelemetryLoader([
+      "RE-INITIALIZING EMAIL MAKER...",
+      "RENDERING RESPONSIVE HTML...",
+      "UPDATING TRANSMISSION PAYLOAD..."
+    ]);
+
+    try {
+      const res = await apiGenerateEmail(state.activeJob.id);
+      stopTelemetryLoader();
+
+      if (res.success) {
+        state.activeJob.status = res.status;
+        state.activeJob.email_html = res.email_html;
+        populateEmailReview(state.activeJob);
+        showToast('Email regenerated successfully!');
+      } else {
+        showToast(`Regeneration failed: ${res.error}`);
+      }
+    } catch (err) {
+      stopTelemetryLoader();
+      showToast('Network error during email regeneration.');
+    }
+  });
+
+  // Approve Email Action
+  btnApproveEmail.addEventListener('click', async () => {
+    if (!state.activeJob) return;
+
+    startTelemetryLoader([
+      "AUTHORIZING TRANSMISSION...",
+      "SECURING EMAIL PAYLOAD...",
+      "UPDATING MISSION STATUS..."
+    ]);
+
+    try {
+      const res = await apiApproveEmail(state.activeJob.id);
+      stopTelemetryLoader();
+
+      if (res.success) {
+        state.activeJob.status = res.status;
+        showToast('EMAIL APPROVED. TRANSMISSION AUTHORIZED.');
+        switchView('pipelinePreview', 6);
+      } else {
+        showToast(`Approval failed: ${res.error}`);
+      }
+    } catch (err) {
+      stopTelemetryLoader();
+      showToast('Network error during email approval.');
+    }
+  });
+
 
   // =========================================================================
   // GLOBAL NAVIGATION CLICKS

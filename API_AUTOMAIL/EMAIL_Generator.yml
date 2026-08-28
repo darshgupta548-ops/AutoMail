@@ -1,0 +1,16 @@
+info:
+  name: EMAIL_Generator
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: http://localhost:5000/api/jobs/3/email/generate
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false
