@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: http://localhost:5000/api/jobs/2/context
+  url: http://localhost:5000/api/jobs/2
   auth: inherit
 
 settings:

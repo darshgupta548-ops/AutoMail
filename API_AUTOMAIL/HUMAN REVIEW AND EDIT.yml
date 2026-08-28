@@ -6,6 +6,37 @@ info:
 http:
   method: PUT
   url: http://localhost:5000/api/jobs/2/context
+  body:
+    type: json
+    data: |2-
+       {
+          "subject": "Build & Track the Sun — HELIOTRACK 2.0",
+          "preheader": "A hands-on workshop in Sun sensors, electronics, and solar tracking.",
+          "headline": "Capture the Sun: Build, Code & Track",
+          "intro": "Ready to turn solar science into something you can actually build? HELIOTRACK 2.0 brings astronomy and hands-on engineering together.",
+          "sections": [
+            {
+              "heading": "Build Your Own Solar Technology",
+              "body": "Explore solar tracking through practical electronics and coding.",
+              "bullets": [
+                "Design and construct functional Sun sensors",
+                "Implement code for solar tracking",
+                "Explore the technology behind solar observation"
+              ]
+            }
+          ],
+          "event_details": {
+            "date": "2026-10-11",
+            "time": "10:00 AM - 04:00 PM",
+            "venue": "D-002",
+            "registration_url": null
+          },
+          "cta": {
+            "label": "Register for HelioTrack 2.0",
+            "url": null
+          },
+          "closing": "See you at D-002!"
+        }
   auth: inherit
 
 settings:

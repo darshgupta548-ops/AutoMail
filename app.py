@@ -3,7 +3,7 @@
 from datetime import date, time
 from pathlib import Path
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template, request
 
 from extensions import db
 from models.email_context import EmailContext
@@ -82,8 +82,9 @@ def create_app(test_config=None):
         db.create_all()
 
     @app.get("/")
-    def index():
-        return "AUTO-MAIL is running."
+    @app.get("/jobs/<int:job_id>")
+    def index(job_id=None):
+        return render_template("app/index.html")
 
     @app.post("/api/jobs")
     def create_job():

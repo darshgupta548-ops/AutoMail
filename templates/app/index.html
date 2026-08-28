@@ -1,5 +1,343 @@
 <!doctype html>
 <html lang="en">
-  <head><meta charset="utf-8"><title>AUTO-MAIL</title></head>
-  <body><h1>AUTO-MAIL</h1></body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AUTO-MAIL // Mission Control</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- GLOBAL HEADER -->
+    <header class="global-header">
+      <a href="#" class="brand-logo" id="nav-brand">
+        <div class="brand-orbital-dot"></div>
+        <span class="brand-title">AUTO-MAIL</span>
+        <span class="brand-tag">v2.0</span>
+      </a>
+
+      <div class="active-telemetry-pill" id="telemetry-pill" style="display: none;">
+        <div class="telemetry-pulse"></div>
+        <span id="telemetry-job-name">ACTIVE MISSION: NONE</span>
+      </div>
+
+      <nav class="header-nav">
+        <a href="#" class="nav-link active" id="nav-dashboard">Missions Grid</a>
+        <a href="#" class="nav-link" id="nav-create">+ New Mission</a>
+      </nav>
+    </header>
+
+    <!-- MISSION PROGRESS STEPPER -->
+    <div class="mission-stepper-wrapper" id="stepper-container">
+      <div class="mission-stepper">
+        <div class="stepper-progress-track">
+          <div class="stepper-progress-bar" id="stepper-bar"></div>
+        </div>
+
+        <button class="step-item active" data-step="1">
+          <div class="step-node">01</div>
+          <div class="step-label">EVENT</div>
+        </button>
+
+        <button class="step-item" data-step="2">
+          <div class="step-node">02</div>
+          <div class="step-label">CONTEXT</div>
+        </button>
+
+        <button class="step-item" data-step="3">
+          <div class="step-node">03</div>
+          <div class="step-label">REVIEW</div>
+        </button>
+
+        <button class="step-item" data-step="4">
+          <div class="step-node">04</div>
+          <div class="step-label">BUILD</div>
+        </button>
+
+        <button class="step-item" data-step="5">
+          <div class="step-node">05</div>
+          <div class="step-label">VERIFY</div>
+        </button>
+
+        <button class="step-item" data-step="6">
+          <div class="step-node">06</div>
+          <div class="step-label">TEST</div>
+        </button>
+
+        <button class="step-item" data-step="7">
+          <div class="step-node">07</div>
+          <div class="step-label">SEND</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- VIEW 1: DASHBOARD / PAST MISSIONS -->
+    <section class="view-section active" id="view-dashboard">
+      <div class="editorial-header">
+        <div class="system-indicator">
+          <div class="indicator-dot"></div>
+          MAIL ENGINE ONLINE
+        </div>
+        <h1 class="editorial-title">CREATE COMMUNICATIONS.<br><span style="color: var(--text-muted);">LAUNCH WITH CONFIDENCE.</span></h1>
+        <p class="editorial-subtitle">Transform raw event signals, WhatsApp broadcasts, and visual posters into high-impact responsive email campaigns.</p>
+      </div>
+
+      <div class="space-panel">
+        <div class="space-panel-header">
+          <h2 class="panel-title">MISSION LOG</h2>
+          <button class="btn-mission btn-mission-primary btn-sm" id="btn-hero-new">CREATE NEW MISSION ➔</button>
+        </div>
+        
+        <div class="jobs-grid" id="past-jobs-grid">
+          <!-- Dynamic Job Cards rendered via JS -->
+          <div class="job-card" style="text-align: center; padding: 40px; border: 1px dashed var(--border-subtle); background: transparent;">
+            <p style="color: var(--cyan-primary); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; animation: telemetry-pulse-slow 2s infinite;">SYNCING MISSION LOG...</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 2: CREATE MISSION (STAGE 01 - EVENT) -->
+    <section class="view-section" id="view-create">
+      <div class="editorial-header">
+        <span class="section-tag">// STAGE 01 — EVENT SIGNAL INPUT</span>
+        <h1 class="editorial-title">CREATE YOUR NEXT CAMPAIGN</h1>
+        <p class="editorial-subtitle">Enter mission core parameters, WhatsApp broadcasts, and upload visual asset posters.</p>
+      </div>
+
+      <form id="create-job-form">
+        <div class="space-panel">
+          <h2 class="panel-title" style="margin-bottom: 20px;">1. EVENT DETAILS</h2>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">EVENT NAME <span class="required">*</span></label>
+              <input type="text" class="space-input" id="field-event-name" placeholder="e.g., HELIOTRACK 2.0" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">EVENT DATE <span class="required">*</span></label>
+              <input type="date" class="space-input" id="field-event-date" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">START TIME <span class="required">*</span></label>
+              <input type="time" class="space-input" id="field-start-time" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">END TIME (OPTIONAL)</label>
+              <input type="time" class="space-input" id="field-end-time">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">VENUE / LOCATION</label>
+              <input type="text" class="space-input" id="field-venue" placeholder="e.g., PDEU Astronomy Observatory">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">REGISTRATION LINK</label>
+              <input type="url" class="space-input" id="field-reg-url" placeholder="https://example.com/register">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 20px;">
+            <label class="form-label">EVENT DESCRIPTION <span class="required">*</span></label>
+            <textarea class="space-textarea" id="field-description" placeholder="Comprehensive event overview, speaker details, activities, and goals..." required></textarea>
+          </div>
+
+          <div class="form-group" style="margin-top: 20px;">
+            <label class="form-label">WHATSAPP MESSAGE / RAW BROADCAST (OPTIONAL)</label>
+            <textarea class="space-textarea" id="field-whatsapp" placeholder="Paste raw WhatsApp text or promo copy here for extra context..."></textarea>
+          </div>
+        </div>
+
+        <div class="space-panel">
+          <h2 class="panel-title">2. VISUAL ASSETS (CLOUDINARY HOSTING)</h2>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+            Upload poster or background images. Uploads are hosted via Cloudinary HTTPS and attached to the AI context generator.
+          </p>
+          
+          <div class="upload-grid">
+            <div class="dropzone-area" id="dropzone-poster">
+              <div class="dropzone-icon">📷</div>
+              <div class="dropzone-text"><strong>EVENT POSTER</strong><br>Click or drag image file</div>
+              <input type="file" id="file-poster" accept="image/*" style="display: none;">
+              <div id="poster-preview-container"></div>
+            </div>
+
+            <div class="dropzone-area" id="dropzone-bg">
+              <div class="dropzone-icon">🎨</div>
+              <div class="dropzone-text"><strong>EMAIL BACKGROUND (OPTIONAL)</strong><br>Click or drag image file</div>
+              <input type="file" id="file-bg" accept="image/*" style="display: none;">
+              <div id="bg-preview-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-bar">
+          <button type="button" class="btn-mission btn-mission-secondary" id="btn-cancel-create">CANCEL</button>
+          <button type="submit" class="btn-mission btn-mission-primary" id="btn-submit-create">
+            INITIALIZE MISSION & GENERATE CONTEXT ➔
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- VIEW 3: CONTEXT REVIEW & EDIT (STAGE 02 & 03) -->
+    <section class="view-section" id="view-context-review">
+      <div class="hitl-banner">
+        <div class="hitl-info">
+          <span class="hitl-badge">AI GENERATED</span>
+          <span class="hitl-text">Sense Maker context generated. Review and refine before proceeding to email build.</span>
+        </div>
+        <button class="btn-mission btn-mission-secondary btn-sm" id="btn-trigger-regen">↻ REGENERATE CONTEXT</button>
+      </div>
+
+      <div class="editorial-header">
+        <span class="section-tag">// STAGE 03 — HUMAN REVIEW & EDIT</span>
+        <h1 class="editorial-title">STRUCTURED CONTEXT REVIEW</h1>
+        <p class="editorial-subtitle">Refine the AI-synthesized copy, section headlines, and event bullets to match your campaign goals.</p>
+      </div>
+
+      <form id="review-context-form">
+        <!-- 1. CORE HEADINGS -->
+        <div class="space-panel">
+          <h2 class="panel-title" style="margin-bottom: 20px;">1. CORE EMAIL COPY</h2>
+          
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label">SUBJECT LINE</label>
+            <input type="text" class="space-input" id="edit-ctx-subject" required>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label">PREHEADER</label>
+            <input type="text" class="space-input" id="edit-ctx-preheader" required>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label">MAIN HEADLINE</label>
+            <input type="text" class="space-input" id="edit-ctx-headline" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">INTRODUCTION</label>
+            <textarea class="space-textarea" id="edit-ctx-intro" required></textarea>
+          </div>
+        </div>
+
+        <!-- 2. CONTENT SECTIONS -->
+        <div class="space-panel">
+          <div class="space-panel-header">
+            <h2 class="panel-title">2. CONTENT SECTIONS</h2>
+            <button type="button" class="btn-mission btn-mission-secondary btn-sm" id="btn-add-section">+ ADD SECTION</button>
+          </div>
+
+          <div id="editor-sections-container">
+            <!-- Dynamic section cards populated via JS -->
+          </div>
+        </div>
+
+        <!-- 3. EVENT FACTS & CTA -->
+        <div class="space-panel">
+          <h2 class="panel-title" style="margin-bottom: 20px;">3. EVENT FACTS & CALL TO ACTION</h2>
+          
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">EVENT DATE FACT</label>
+              <input type="text" class="space-input" id="edit-ctx-date" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">EVENT TIME FACT</label>
+              <input type="text" class="space-input" id="edit-ctx-time" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">VENUE FACT</label>
+              <input type="text" class="space-input" id="edit-ctx-venue">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">REGISTRATION URL</label>
+              <input type="url" class="space-input" id="edit-ctx-reg-url">
+            </div>
+          </div>
+
+          <div class="form-grid" style="margin-top: 20px;">
+            <div class="form-group">
+              <label class="form-label">CTA BUTTON LABEL</label>
+              <input type="text" class="space-input" id="edit-ctx-cta-label" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">CTA BUTTON TARGET URL</label>
+              <input type="url" class="space-input" id="edit-ctx-cta-url">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 20px;">
+            <label class="form-label">CLOSING REMARKS</label>
+            <input type="text" class="space-input" id="edit-ctx-closing" required>
+          </div>
+        </div>
+
+        <div class="action-bar">
+          <button type="button" class="btn-mission btn-mission-secondary" id="btn-back-dashboard">BACK TO MISSIONS</button>
+          <button type="submit" class="btn-mission btn-mission-primary" id="btn-approve-context">
+            APPROVE CONTEXT & ADVANCE TO BUILD ➔
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- VIEW 4: FUTURE PIPELINE STAGES (STAGE 04-07) -->
+    <section class="view-section" id="view-pipeline-preview">
+      <div class="editorial-header">
+        <span class="section-tag">// STAGE 04-07 — EMAIL BUILD & TRANSMISSION</span>
+        <h1 class="editorial-title" id="pipeline-stage-title">YOUR MISSION IS READY</h1>
+        <p class="editorial-subtitle">Structured context has been approved. The email renderer and test mail pipeline will generate the responsive design next.</p>
+      </div>
+
+      <div class="space-panel" style="text-align: center; padding: 60px 40px;">
+        <div style="font-size: 48px; color: var(--cyan-primary); margin-bottom: 16px;">✨</div>
+        <h2 class="panel-title" style="font-size: 24px; margin-bottom: 12px;">CONTEXT APPROVED & READY FOR RENDER</h2>
+        <p style="color: var(--text-muted); max-width: 540px; margin: 0 auto 28px auto;">
+          The backend status is updated to <strong style="color: var(--status-approved);" id="pipeline-status-badge">CONTEXT_APPROVED</strong>. The next phases (Email Maker rendering, Inbox Verification, and Resend final send) will consume this approved context.
+        </p>
+
+        <button class="btn-mission btn-mission-primary" id="btn-pipeline-return">RETURN TO MISSION DASHBOARD</button>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- TELEMETRY LOADING MODAL -->
+  <div class="modal-backdrop" id="telemetry-modal">
+    <div class="telemetry-card">
+      <div class="telemetry-spinner"></div>
+      <h3 style="font-family: var(--font-heading); font-size: 18px; color: var(--text-bright);">COMMUNICATIONS ENGINE ONLINE</h3>
+      <div class="telemetry-status-text" id="telemetry-status-msg">INITIALIZING MAIL ENGINE...</div>
+    </div>
+  </div>
+
+  <!-- REGENERATE SAFETY CONFIRMATION MODAL -->
+  <div class="modal-backdrop" id="regen-confirm-modal">
+    <div class="telemetry-card" style="max-width: 440px; text-align: left;">
+      <h3 style="font-family: var(--font-heading); font-size: 20px; color: var(--text-bright); margin-bottom: 12px;">GENERATE NEW AI VERSION?</h3>
+      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 24px;">
+        Regenerating context will query Gemini again. Any unsaved edits you made in the editor will be replaced.
+      </p>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button class="btn-mission btn-mission-secondary btn-sm" id="btn-cancel-regen">CANCEL</button>
+        <button class="btn-mission btn-mission-danger btn-sm" id="btn-confirm-regen">GENERATE NEW VERSION</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/static/js/app.js"></script>
+</body>
 </html>
