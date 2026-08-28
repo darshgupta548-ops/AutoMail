@@ -5,7 +5,15 @@ info:
 
 http:
   method: POST
-  url: POST http://localhost:5000/api/jobs/2/assets
+  url: http://localhost:5000/api/jobs/1/assets
+  body:
+    type: multipart-form
+    data:
+      - name: poster
+        type: file
+        value:
+          - C:\Users\Administrator\Pictures\heliotrack.jpg
+        contentType: image/jpeg
   auth: inherit
 
 settings:

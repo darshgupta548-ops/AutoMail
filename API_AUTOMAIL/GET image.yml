@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: http://localhost:5000/api/jobs
+  url: http://localhost:5000/api/jobs/1
   body:
     type: json
     data: |-

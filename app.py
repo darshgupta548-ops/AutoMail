@@ -6,6 +6,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request
 
 from extensions import db
+from models.email_context import EmailContext
 from models.email_job import EmailJob, JobStatus
 from services import asset_service, sense_maker
 
@@ -143,6 +144,39 @@ def create_app(test_config=None):
             job_id=job.id,
             status=job.status,
             email_context=context,
+        )
+
+    @app.put("/api/jobs/<int:job_id>/context")
+    def approve_job_context(job_id):
+        job = db.session.get(EmailJob, job_id)
+        if job is None:
+            return jsonify(success=False, error="Email job not found."), 404
+
+        context_payload = request.get_json(silent=True)
+        if not isinstance(context_payload, dict):
+            return jsonify(success=False, error="Request body must be a JSON object."), 400
+
+        # Store original context and status for rollback on validation failure
+        original_context = job.email_context
+        original_status = job.status
+
+        try:
+            validated_context = EmailContext.model_validate(context_payload).model_dump(mode="json")
+        except Exception as error:
+            # Preserve original context and status on validation failure
+            job.email_context = original_context
+            job.status = original_status
+            db.session.commit()
+            return jsonify(success=False, error=f"Invalid email context: {str(error)}"), 400
+
+        job.email_context = validated_context
+        job.status = JobStatus.CONTEXT_APPROVED
+        db.session.commit()
+        return jsonify(
+            success=True,
+            job_id=job.id,
+            status=job.status,
+            email_context=validated_context,
         )
 
     @app.get("/api/jobs/<int:job_id>")

@@ -102,3 +102,89 @@ def test_json_fields_round_trip(client, job_payload):
     assert job["email_context"] == job_payload["email_context"]
     assert job["event_palette"] == job_payload["event_palette"]
     assert job["event_typography"] == job_payload["event_typography"]
+
+
+VALID_CONTEXT = {
+    "subject": "Explore the Night Sky",
+    "preheader": "Join HELIOTRACK 2.0.",
+    "headline": "HELIOTRACK 2.0",
+    "intro": "Join us for an astronomy event.",
+    "sections": [{"heading": "What to expect", "body": "Astronomy activities.", "bullets": []}],
+    "event_details": {
+        "date": "2026-10-11",
+        "time": "10:00",
+        "venue": None,
+        "registration_url": None,
+    },
+    "cta": {"label": "Learn more", "url": None},
+    "closing": "See you there.",
+}
+
+
+def test_approve_context_successfully_updates_job(client, job_payload):
+    job_id = client.post("/api/jobs", json=job_payload).get_json()["job"]["id"]
+    
+    response = client.put(f"/api/jobs/{job_id}/context", json=VALID_CONTEXT)
+    
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["success"] is True
+    assert data["job_id"] == job_id
+    assert data["status"] == "CONTEXT_APPROVED"
+    assert data["email_context"] == VALID_CONTEXT
+    
+    job = client.get(f"/api/jobs/{job_id}").get_json()["job"]
+    assert job["email_context"] == VALID_CONTEXT
+    assert job["status"] == "CONTEXT_APPROVED"
+
+
+def test_approve_context_with_invalid_schema_returns_400(client, job_payload):
+    job_id = client.post("/api/jobs", json=job_payload).get_json()["job"]["id"]
+    original_job = client.get(f"/api/jobs/{job_id}").get_json()["job"]
+    
+    invalid_context = {"subject": "Missing required fields"}
+    response = client.put(f"/api/jobs/{job_id}/context", json=invalid_context)
+    
+    assert response.status_code == 400
+    assert response.get_json()["success"] is False
+    assert "Invalid email context" in response.get_json()["error"]
+    
+    # Verify original context and status are preserved
+    job = client.get(f"/api/jobs/{job_id}").get_json()["job"]
+    assert job["email_context"] == original_job["email_context"]
+    assert job["status"] == original_job["status"]
+
+
+def test_approve_context_preserves_on_validation_failure(client, job_payload):
+    job_id = client.post("/api/jobs", json=job_payload).get_json()["job"]["id"]
+    
+    # Set initial context and status
+    initial_context = {"subject": "Original", "preheader": "Original", "headline": "Original",
+                       "intro": "Original", "sections": [], "event_details": {"date": "2026-10-11", "time": "10:00", "venue": None, "registration_url": None},
+                       "cta": {"label": "Original", "url": None}, "closing": "Original"}
+    client.put(f"/api/jobs/{job_id}/context", json=initial_context)
+    
+    job_before = client.get(f"/api/jobs/{job_id}").get_json()["job"]
+    
+    # Try to submit invalid context
+    invalid_context = {"invalid": "schema"}
+    response = client.put(f"/api/jobs/{job_id}/context", json=invalid_context)
+    
+    assert response.status_code == 400
+    
+    # Verify preservation
+    job_after = client.get(f"/api/jobs/{job_id}").get_json()["job"]
+    assert job_after["email_context"] == job_before["email_context"]
+    assert job_after["status"] == job_before["status"]
+
+
+def test_approve_context_non_existent_job_returns_404(client):
+    response = client.put("/api/jobs/999/context", json=VALID_CONTEXT)
+    assert response.status_code == 404
+    assert response.get_json()["success"] is False
+
+
+def test_approve_context_with_non_json_returns_400(client, job_payload):
+    job_id = client.post("/api/jobs", json=job_payload).get_json()["job"]["id"]
+    response = client.put(f"/api/jobs/{job_id}/context", data="not json")
+    assert response.status_code == 400

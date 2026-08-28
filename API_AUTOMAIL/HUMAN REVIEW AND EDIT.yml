@@ -1,0 +1,16 @@
+info:
+  name: HUMAN REVIEW AND EDIT
+  type: http
+  seq: 6
+
+http:
+  method: PUT
+  url: http://localhost:5000/api/jobs/2/context
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: http://localhost:5000/api/jobs/1/assets
+  url: http://localhost:5000/api/jobs/2/context/generate
   body:
     type: multipart-form
     data:

@@ -15,8 +15,8 @@ http:
         "event_start_time": "10:00",
         "event_end_time": "16:00",
         "event_description": "An astronomy event.",
-        "event_whatsapp_message": "Join us...",
-        "event_poster": "https://example.com/poster.jpg"
+        "event_whatsapp_message": "HelioTrack returns with its second edition — HelioTrack 2.0, a one-day hands-on workshop designed for curious innovators and space enthusiasts. Step into the world of solar physics and technology, where you will design and build Sun sensors, track the Sun through coding, and discover how our closest star shapes the solar system and life on Earth.This workshop is more than just learning — it’s an opportunity to blend astronomy with technology. Participants will gain practical skills in solar tracking, coding, and electronics, while also deepening their scientific understanding of the Sun’s immense impact.📌 Event Details:->Date: 2026-10-11->Venue: D-002->Duration: 10 AM ti 04PM💰 Registration Fees:->Individual: ₹80/-->Team (4-7 members): ₹500/-⚡ Note:->Individual participants must attend the full-day workshop.->Students from other colleges must carry their valid College ID on the day of the event; without it, entry will not be permitted.📞 Contact for Queries:Kashyap: +91 6354959954 | Astha: +91 8160852488HelioTrack 2.0 is your gateway to becoming a true Sun chaser☀—explore, innovate, and bring solar technology to life in ways you’ve never imagined✨. Join us and track the Sun like never before!🔭",
+        "event_poster": "https://res.cloudinary.com/vmt4lznh/image/upload/v1787863476/automail/posters/mmv0ksmvxfbr7aptwvnw.jpg"
       }
   auth: inherit
 
