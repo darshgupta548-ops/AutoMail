@@ -24,6 +24,7 @@
 
       <nav class="header-nav">
         <a href="#" class="nav-link active" id="nav-dashboard">Missions Grid</a>
+        <a href="#" class="nav-link" id="nav-assets">ASSETS</a>
         <a href="#" class="nav-link" id="nav-create">+ New Mission</a>
       </nav>
     </header>
@@ -93,6 +94,29 @@
           <!-- Dynamic Job Cards rendered via JS -->
           <div class="job-card" style="text-align: center; padding: 40px; border: 1px dashed var(--border-subtle); background: transparent;">
             <p style="color: var(--cyan-primary); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; animation: telemetry-pulse-slow 2s infinite;">SYNCING MISSION LOG...</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW: ASSET MANAGEMENT -->
+    <section class="view-section" id="view-assets">
+      <div class="editorial-header">
+        <span class="section-tag">// ASSET MANAGEMENT</span>
+        <h1 class="editorial-title">CLOUDINARY POSTER ASSETS</h1>
+        <p class="editorial-subtitle">View and manage Cloudinary-hosted poster images. Assets referenced by sent emails are protected from deletion.</p>
+      </div>
+
+      <div class="space-panel">
+        <div class="space-panel-header">
+          <h2 class="panel-title">POSTER ASSETS</h2>
+          <button class="btn-mission btn-mission-secondary btn-sm" id="btn-refresh-assets">REFRESH LIST</button>
+        </div>
+        
+        <div class="assets-grid" id="assets-grid">
+          <!-- Dynamic asset cards rendered via JS -->
+          <div class="job-card" style="text-align: center; padding: 40px; border: 1px dashed var(--border-subtle); background: transparent;">
+            <p style="color: var(--cyan-primary); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; animation: telemetry-pulse-slow 2s infinite;">LOADING ASSET TELEMETRY...</p>
           </div>
         </div>
       </div>

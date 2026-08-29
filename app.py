@@ -104,25 +104,44 @@ def create_app(test_config=None):
         if job is None:
             return jsonify(success=False, error="Email job not found."), 404
 
-        poster = request.files.get("poster")
-        background = request.files.get("background")
-        if not any(file and file.filename for file in (poster, background)):
-            return jsonify(success=False, error="Provide a poster or background image."), 400
+        poster_file = request.files.get("poster")
+        background_file = request.files.get("background")
+
+        # Require at least one asset to be uploaded
+        if not poster_file and not background_file:
+            return jsonify(success=False, error="At least one asset (poster or background) must be provided."), 400
+
+        poster_url = None
+        background_url = None
+        warning = None
 
         try:
-            poster_url = asset_service.upload_poster(poster) if poster and poster.filename else None
-            background_url = asset_service.upload_background(background) if background and background.filename else None
-        except asset_service.InvalidAssetError as error:
-            return jsonify(success=False, error=str(error)), 400
+            if poster_file:
+                poster_url = asset_service.upload_poster(poster_file)
+            if background_file:
+                background_url, warning = asset_service.upload_background(background_file)
         except asset_service.AssetServiceError as error:
-            return jsonify(success=False, error=str(error)), 502
+            return jsonify(success=False, error=str(error)), 400
 
         if poster_url:
             job.event_poster = poster_url
         if background_url:
             job.email_bg = background_url
         db.session.commit()
-        return jsonify(success=True, assets={"poster_url": poster_url, "background_url": background_url})
+        
+        response_data = {
+            "success": True,
+            "assets": {"poster_url": poster_url, "background_url": background_url}
+        }
+        
+        if warning:
+            response_data["warning"] = str(warning)
+            response_data["warning_details"] = {
+                "width": warning.width,
+                "height": warning.height
+            }
+        
+        return jsonify(response_data)
 
     @app.post("/api/jobs/<int:job_id>/context/generate")
     def generate_job_context(job_id):
@@ -259,7 +278,19 @@ def create_app(test_config=None):
         if not isinstance(payload, dict):
             return jsonify(success=False, error="Request body must be a JSON object."), 400
         try:
-            context = EmailContext.model_validate(payload).model_dump(mode="json", exclude_defaults=True)
+            # Preserve existing non-editable fields (like logo URLs and background URL) by merging
+            existing_context = job.email_context or {}
+            updated_context = {**existing_context, **payload}
+            context = EmailContext.model_validate(updated_context).model_dump(mode="json", exclude_defaults=True)
+            
+            # Inject logo URLs if missing (same logic as generate endpoint)
+            if not context.get('brahmand_logo_url'):
+                context['brahmand_logo_url'] = 'https://res.cloudinary.com/vmt4lznh/image/upload/v1787948490/Brahmand_Logo_-_Black_PNG.png'
+            if not context.get('snt_logo_url'):
+                context['snt_logo_url'] = 'https://res.cloudinary.com/vmt4lznh/image/upload/v1787948490/sntlogo.png'
+            if not context.get('osail_logo_url'):
+                context['osail_logo_url'] = 'https://res.cloudinary.com/vmt4lznh/image/upload/v1787948489/Osail_black_logo.png'
+            
             html = email_maker.render_email(context, poster_url=job.event_poster, background_url=job.email_bg)
         except Exception as error:
             return jsonify(success=False, error=f"Invalid email content: {str(error)}"), 400
@@ -279,6 +310,104 @@ def create_app(test_config=None):
     def list_jobs():
         jobs = db.session.execute(db.select(EmailJob).order_by(EmailJob.id)).scalars()
         return jsonify(success=True, jobs=[job.to_dict() for job in jobs])
+
+    @app.delete("/api/jobs/<int:job_id>")
+    def delete_job(job_id):
+        """Delete a job only if it has never been sent."""
+        job = db.session.get(EmailJob, job_id)
+        if job is None:
+            return jsonify(success=False, error="Email job not found."), 404
+        
+        # Sent states are protected from deletion
+        sent_states = {JobStatus.TEST_SENT, JobStatus.TEST_APPROVED, JobStatus.FINAL_SENT}
+        if job.status in sent_states:
+            return jsonify(success=False, error=f"Cannot delete job in {job.status} state. Sent emails are protected."), 403
+        
+        # Delete the job
+        db.session.delete(job)
+        db.session.commit()
+        return jsonify(success=True, job_id=job.id, message="Job deleted successfully.")
+
+    @app.get("/api/assets/posters")
+    def list_poster_assets():
+        """List all Cloudinary poster assets with their job references and deletion safety."""
+        sent_states = {JobStatus.TEST_SENT, JobStatus.TEST_APPROVED, JobStatus.FINAL_SENT}
+        
+        # Get all jobs that reference posters
+        jobs = db.session.execute(db.select(EmailJob).where(EmailJob.event_poster.isnot(None))).scalars()
+        
+        # Build a map of poster URL -> list of referencing jobs
+        poster_references = {}
+        for job in jobs:
+            poster_url = job.event_poster
+            if poster_url:
+                if poster_url not in poster_references:
+                    poster_references[poster_url] = []
+                poster_references[poster_url].append({
+                    "id": job.id,
+                    "event_name": job.event_name,
+                    "status": job.status,
+                    "is_sent": job.status in sent_states
+                })
+        
+        # Convert to asset list with safety info
+        assets = []
+        for poster_url, references in poster_references.items():
+            has_sent_reference = any(ref["is_sent"] for ref in references)
+            public_id = asset_service.extract_public_id_from_url(poster_url)
+            
+            assets.append({
+                "url": poster_url,
+                "public_id": public_id,
+                "references": references,
+                "reference_count": len(references),
+                "has_sent_reference": has_sent_reference,
+                "deletable": not has_sent_reference
+            })
+        
+        return jsonify(success=True, assets=assets)
+
+    @app.delete("/api/assets/posters")
+    def delete_poster_asset():
+        """Delete a Cloudinary poster asset if it's safe to delete."""
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify(success=False, error="Request body must be a JSON object."), 400
+        
+        poster_url = data.get("url")
+        if not poster_url:
+            return jsonify(success=False, error="poster_url is required."), 400
+        
+        sent_states = {JobStatus.TEST_SENT, JobStatus.TEST_APPROVED, JobStatus.FINAL_SENT}
+        
+        # Check if any sent jobs reference this poster
+        jobs = db.session.execute(
+            db.select(EmailJob).where(EmailJob.event_poster == poster_url)
+        ).scalars()
+        
+        for job in jobs:
+            if job.status in sent_states:
+                return jsonify(
+                    success=False,
+                    error=f"Cannot delete: poster is referenced by sent job #{job.id} ({job.event_name})."
+                ), 403
+        
+        # Safe to delete - remove from all non-sent jobs first
+        for job in jobs:
+            job.event_poster = None
+        db.session.commit()
+        
+        # Delete from Cloudinary
+        try:
+            public_id = asset_service.extract_public_id_from_url(poster_url)
+            if public_id:
+                asset_service.delete_cloudinary_asset(public_id)
+        except asset_service.AssetServiceError as error:
+            # Cloudinary deletion failed, but we've already cleared references
+            # This is acceptable as the asset is now orphaned
+            pass
+        
+        return jsonify(success=True, message="Poster asset deleted successfully.")
 
     return app
 

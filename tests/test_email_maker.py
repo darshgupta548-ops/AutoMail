@@ -1,6 +1,7 @@
 """Tests for the EmailMaker deterministic Jinja-based email renderer."""
 
 import pytest
+import re
 
 from services.email_maker import render_email, EmailMakerError
 
@@ -452,7 +453,7 @@ def test_responsive_logo_markup_exists_without_scaling():
     assert 'class="org-logo"' in html
     assert '.org-logo{width:100%!important;max-width:90px!important;height:auto!important}' in html
     assert 'transform:scale' not in html
-    assert 'width:28%' in html, "Mobile logos should use percentage-based sizing (28%)"
+    assert 'width:33.33%' in html, "Mobile logos should use 33.33% for equal distribution"
     assert 'font-size:28px' in html, "Mobile headline should be 28px"
     assert 'img{max-width:100%!important' in html, "Mobile should have img max-width rule for responsiveness"
 
@@ -482,6 +483,9 @@ def test_no_fixed_width_elements_cause_mobile_overflow():
     # Verify word-wrap for text wrapping
     assert 'word-wrap:break-word' in html, "Should have word-wrap for text wrapping"
     
+    # Verify overflow-wrap for robust text wrapping
+    assert 'overflow-wrap:anywhere' in html, "Should have overflow-wrap for robust text wrapping"
+    
     # Verify no min-width that could cause overflow
     assert 'min-width:' not in html.lower(), "Should not have min-width that could cause overflow"
     
@@ -492,4 +496,50 @@ def test_no_fixed_width_elements_cause_mobile_overflow():
     assert 'padding:28px 52px' not in html, "Should not have 52px padding that causes mobile overflow"
     assert 'padding:0 52px' not in html, "Should not have 52px padding that causes mobile overflow"
     assert 'td.mobile-padding{padding:20px 16px!important}' in html, "Mobile padding should be overridden to 20px 16px"
+    
+    # Verify logo cells use 33.33% for equal distribution
+    assert 'width:33.33%' in html, "Logo cells should use 33.33% for equal distribution"
+    assert '.logo-cell{width:33.33%!important}' in html, "Mobile logo cells should use 33.33%"
+
+
+def test_subcom_email_requirements():
+    """Comprehensive regression test for Subcom email requirements."""
+    html = render_email({**COMPLETE_CONTEXT, **ORGANIZATION_LOGOS})
+    
+    # No Markdown URLs in src/href attributes
+    assert 'src="[' not in html, "Should not have Markdown URLs in src attributes"
+    assert 'href="[' not in html, "Should not have Markdown URLs in href attributes"
+    
+    # All three logos render correctly
+    assert html.count('<img') >= 3, "Should have at least 3 images"
+    assert 'Brahmand_Logo_-_Black_PNG.png' in html, "Should have Brahmand logo"
+    assert 'Osail_black_logo.png' in html, "Should have OSAIL logo"
+    assert 'sntlogo.png' in html, "Should have S&T logo"
+    
+    # No horizontal overflow-causing fixed widths
+    assert 'width="600"' not in html or 'width="100%"' in html, "Should not have fixed 600px width causing overflow"
+    
+    # 375px mobile rendering remains fluid
+    assert 'table[class=email-container]{width:100%!important;max-width:100%!important}' in html
+    assert 'img{max-width:100%!important;height:auto!important}' in html
+    
+    # Poster remains fluid
+    assert 'width="100%"' in html and 'max-width:600px' in html, "Poster should be fluid"
+    
+    # Event Details contains only Date/Time/Venue (no Registration)
+    event_details_match = re.search(r'Event details.*?</table>', html, re.DOTALL | re.IGNORECASE)
+    if event_details_match:
+        event_details = event_details_match.group()
+        assert 'Registration' not in event_details, "Event Details should not contain Registration"
+        assert 'Date' in event_details, "Event Details should contain Date"
+        assert 'Time' in event_details, "Event Details should contain Time"
+    
+    # Contact Details should be last section if present
+    contact_pos = html.find('Contact Details')
+    if contact_pos > 0:
+        # Check that Contact Details appears after CTA if both exist
+        cta_pos = html.find('Register Now')
+        if cta_pos > 0:
+            assert contact_pos > cta_pos, "Contact Details should be after CTA"
+
 

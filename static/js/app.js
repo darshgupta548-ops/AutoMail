@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // =========================================================================
   const views = {
     dashboard: document.getElementById('view-dashboard'),
+    assets: document.getElementById('view-assets'),
     create: document.getElementById('view-create'),
     contextReview: document.getElementById('view-context-review'),
     pipelinePreview: document.getElementById('view-pipeline-preview'),
@@ -31,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const navLinks = {
     brand: document.getElementById('nav-brand'),
     dashboard: document.getElementById('nav-dashboard'),
+    assets: document.getElementById('nav-assets'),
     create: document.getElementById('nav-create')
   };
 
@@ -186,7 +188,14 @@ document.addEventListener('DOMContentLoaded', () => {
       method: 'POST',
       body: formData
     });
-    return await res.json();
+    const data = await res.json();
+    
+    // Display background dimension warning if present
+    if (data.warning) {
+      showToast(`⚠️ ${data.warning}`, 8000);
+    }
+    
+    return data;
   }
 
   async function apiGenerateContext(jobId) {
@@ -221,6 +230,36 @@ document.addEventListener('DOMContentLoaded', () => {
     return await res.json();
   }
 
+  async function apiDeleteJob(jobId) {
+    const res = await fetch(`/api/jobs/${jobId}`, {
+      method: 'DELETE'
+    });
+    return await res.json();
+  }
+
+  async function apiFetchAssets() {
+    try {
+      const res = await fetch('/api/assets/posters');
+      const data = await res.json();
+      if (data.success) {
+        renderAssetsGrid(data.assets);
+      } else {
+        showToast(`Failed to load assets: ${data.error}`);
+      }
+    } catch (err) {
+      showToast('Network error loading asset telemetry.');
+    }
+  }
+
+  async function apiDeleteAsset(posterUrl) {
+    const res = await fetch('/api/assets/posters', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: posterUrl })
+    });
+    return await res.json();
+  }
+
   // =========================================================================
   // DASHBOARD RENDERER
   // =========================================================================
@@ -229,8 +268,18 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'DRAFT': return '<span class="status-badge badge-draft">● DRAFT</span>';
       case 'CONTEXT_GENERATED': return '<span class="status-badge badge-generated">● CONTEXT GENERATED</span>';
       case 'CONTEXT_APPROVED': return '<span class="status-badge badge-approved">● CONTEXT APPROVED</span>';
+      case 'EMAIL_RENDERED': return '<span class="status-badge badge-rendered">● EMAIL RENDERED</span>';
+      case 'EMAIL_APPROVED': return '<span class="status-badge badge-approved">● EMAIL APPROVED</span>';
+      case 'TEST_SENT': return '<span class="status-badge badge-sent">● TEST SENT</span>';
+      case 'TEST_APPROVED': return '<span class="status-badge badge-sent">● TEST APPROVED</span>';
+      case 'FINAL_SENT': return '<span class="status-badge badge-sent">● FINAL SENT</span>';
       default: return `<span class="status-badge badge-draft">● ${status}</span>`;
     }
+  }
+
+  function isJobDeletable(status) {
+    const sentStates = ['TEST_SENT', 'TEST_APPROVED', 'FINAL_SENT'];
+    return !sentStates.includes(status);
   }
 
   function renderJobsGrid(jobs) {
@@ -247,7 +296,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Sort descending by ID
     const sortedJobs = [...jobs].sort((a, b) => b.id - a.id);
-    pastJobsGrid.innerHTML = sortedJobs.map(job => `
+    pastJobsGrid.innerHTML = sortedJobs.map(job => {
+      const deletable = isJobDeletable(job.status);
+      return `
       <div class="job-card" data-job-id="${job.id}">
         <div>
           <div class="job-card-meta">
@@ -259,15 +310,25 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="job-card-footer">
           <span>DATE: ${job.event_date}</span>
-          <button class="btn-mission btn-mission-secondary btn-sm open-job-btn" data-id="${job.id}">RESUME ➔</button>
+          <div style="display: flex; gap: 8px;">
+            ${deletable ? `<button class="btn-mission btn-mission-danger btn-sm delete-job-btn" data-id="${job.id}">DELETE</button>` : ''}
+            <button class="btn-mission btn-mission-secondary btn-sm open-job-btn" data-id="${job.id}">RESUME ➔</button>
+          </div>
         </div>
       </div>
-    `).join('');
+    `}).join('');
 
     document.querySelectorAll('.open-job-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const jobId = parseInt(e.target.getAttribute('data-id'), 10);
         loadMissionWorkflow(jobId);
+      });
+    });
+
+    document.querySelectorAll('.delete-job-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const jobId = parseInt(e.target.getAttribute('data-id'), 10);
+        confirmDeleteJob(jobId);
       });
     });
   }
@@ -295,6 +356,97 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (err) {
       showToast('Failed to load selected mission telemetry.');
+    }
+  }
+
+  async function confirmDeleteJob(jobId) {
+    if (!confirm('Are you sure you want to delete this mission? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const res = await apiDeleteJob(jobId);
+      if (res.success) {
+        showToast('Mission deleted successfully.');
+        await apiFetchJobs(); // Refresh the grid
+      } else {
+        showToast(`Delete failed: ${res.error}`);
+      }
+    } catch (err) {
+      showToast('Network error during deletion.');
+    }
+  }
+
+  function renderAssetsGrid(assets) {
+    const assetsGrid = document.getElementById('assets-grid');
+    if (!assets || assets.length === 0) {
+      assetsGrid.innerHTML = `
+        <div class="empty-state-card" style="grid-column: 1 / -1; text-align: center; padding: 60px 40px; background: rgba(15, 23, 42, 0.4); border: 1px dashed var(--border-subtle); border-radius: var(--radius-lg);">
+          <div style="font-size: 32px; color: var(--text-dim); margin-bottom: 16px;">⊘</div>
+          <h3 style="font-family: var(--font-heading); font-size: 16px; color: var(--text-main); margin-bottom: 8px;">NO POSTER ASSETS FOUND</h3>
+          <p style="color: var(--text-muted); font-family: var(--font-mono); font-size: 12px;">NO CLOUDINARY POSTERS HAVE BEEN UPLOADED YET.</p>
+        </div>
+      `;
+      return;
+    }
+
+    assetsGrid.innerHTML = assets.map(asset => {
+      const protectionBadge = asset.has_sent_reference 
+        ? '<span class="status-badge badge-sent">PROTECTED</span>' 
+        : '<span class="status-badge badge-draft">DELETABLE</span>';
+      
+      const referencesList = asset.references.map(ref => `
+        <div style="font-size: 11px; color: var(--text-dim); padding: 4px 0; border-bottom: 1px solid var(--border-subtle);">
+          <span style="color: ${ref.is_sent ? 'var(--status-sent)' : 'var(--text-muted)'};">●</span>
+          Mission #${ref.id}: ${ref.event_name} (${ref.status})
+        </div>
+      `).join('');
+
+      return `
+      <div class="job-card asset-card" data-url="${asset.url}">
+        <div>
+          <div class="job-card-meta">
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);">ASSET</span>
+            ${protectionBadge}
+          </div>
+          <div style="margin: 12px 0;">
+            <img src="${asset.url}" alt="Poster" style="width: 100%; max-height: 200px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+          </div>
+          <h3 class="job-card-title" style="font-size: 14px;">${asset.reference_count} Reference(s)</h3>
+          <div style="margin: 12px 0; max-height: 120px; overflow-y: auto;">
+            ${referencesList}
+          </div>
+        </div>
+        <div class="job-card-footer">
+          <span>${asset.deletable ? 'SAFE TO DELETE' : 'PROTECTED BY SENT EMAILS'}</span>
+          ${asset.deletable ? `<button class="btn-mission btn-mission-danger btn-sm delete-asset-btn" data-url="${asset.url}">DELETE</button>` : ''}
+        </div>
+      </div>
+    `}).join('');
+
+    document.querySelectorAll('.delete-asset-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const posterUrl = e.target.getAttribute('data-url');
+        confirmDeleteAsset(posterUrl);
+      });
+    });
+  }
+
+  async function confirmDeleteAsset(posterUrl) {
+    if (!confirm('Are you sure you want to delete this poster asset? This will remove it from all non-sent jobs. This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const res = await apiDeleteAsset(posterUrl);
+      if (res.success) {
+        showToast('Asset deleted successfully.');
+        await apiFetchAssets(); // Refresh the grid
+      } else {
+        showToast(`Delete failed: ${res.error}`);
+      }
+    } catch (err) {
+      showToast('Network error during deletion.');
     }
   }
 
@@ -749,17 +901,20 @@ document.addEventListener('DOMContentLoaded', () => {
       telemetryCta.textContent = (job.email_context.cta && job.email_context.cta.label) ? 'CTA ENABLED' : 'CTA DISABLED';
     }
 
-    if (job.event_poster) {
-      telemetryPoster.innerHTML = `POSTER <span class="t-ok">✓ LOADED</span>`;
-    } else {
-      telemetryPoster.innerHTML = `POSTER <span class="t-none">✓ / — NOT USED</span>`;
-    }
+    // Check asset status by examining the rendered HTML (authoritative source)
+    const html = job.email_html || '';
+    
+    // Poster is used if the actual poster URL appears in the rendered HTML
+    const posterUsed = job.event_poster && html.includes(job.event_poster);
+    telemetryPoster.innerHTML = posterUsed 
+      ? `POSTER <span class="t-ok">✓ USED</span>` 
+      : `POSTER <span class="t-none">— NOT USED</span>`;
 
-    if (job.email_bg) {
-      telemetryBg.innerHTML = `BACKGROUND <span class="t-ok">✓ LOADED</span>`;
-    } else {
-      telemetryBg.innerHTML = `BACKGROUND <span class="t-none">✓ / — NOT USED</span>`;
-    }
+    // Background is used if the actual background URL appears in the rendered HTML
+    const backgroundUsed = job.email_bg && html.includes(job.email_bg);
+    telemetryBg.innerHTML = backgroundUsed 
+      ? `BACKGROUND <span class="t-ok">✓ USED</span>` 
+      : `BACKGROUND <span class="t-none">— NOT USED</span>`;
   }
 
   // Viewport Controls
@@ -840,6 +995,17 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     apiFetchJobs();
     switchView('dashboard', 1);
+  });
+
+  navLinks.assets.addEventListener('click', (e) => {
+    e.preventDefault();
+    apiFetchAssets();
+    switchView('assets', 1);
+  });
+
+  document.getElementById('btn-refresh-assets').addEventListener('click', (e) => {
+    e.preventDefault();
+    apiFetchAssets();
   });
 
   navLinks.brand.addEventListener('click', (e) => {

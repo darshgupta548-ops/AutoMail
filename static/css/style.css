@@ -33,6 +33,8 @@
   --status-generated: #eab308;
   --status-approved: #10b981;
   --status-active: #06b6d4;
+  --status-rendered: #8b5cf6;
+  --status-sent: #f43f5e;
 
   /* Fonts */
   --font-heading: 'Space Grotesk', -apple-system, sans-serif;
@@ -758,6 +760,26 @@ body::before {
 .badge-approved::before { 
   background: #6ee7b7; 
   box-shadow: 0 0 6px #6ee7b7;
+}
+
+.badge-rendered {
+  background: rgba(139, 92, 246, 0.05);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+.badge-rendered::before { 
+  background: #c4b5fd; 
+  box-shadow: 0 0 6px #c4b5fd;
+}
+
+.badge-sent {
+  background: rgba(244, 63, 94, 0.05);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.2);
+}
+.badge-sent::before { 
+  background: #fda4af; 
+  box-shadow: 0 0 6px #fda4af;
 }
 
 @keyframes telemetry-pulse-slow {
