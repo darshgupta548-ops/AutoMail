@@ -330,6 +330,16 @@ def create_app(test_config=None):
             status=job.status,
         )
 
+    @app.get("/api/transmission/test-recipients")
+    def get_stage_06_recipients():
+        recipients = mail_sender.get_test_recipient_emails()
+        return jsonify(success=True, recipients=recipients)
+
+    @app.get("/api/transmission/final-recipients")
+    def get_stage_07_recipients():
+        recipients = mail_sender.get_final_recipient_emails()
+        return jsonify(success=True, recipients=recipients)
+
     @app.post("/api/jobs/<int:job_id>/test-send")
     def send_test_email(job_id):
         job = db.session.get(EmailJob, job_id)
@@ -338,6 +348,9 @@ def create_app(test_config=None):
 
         if not session.get("gmail_sender"):
             return jsonify(success=False, error="A Gmail sender must be authenticated before Stage 06 test send."), 403
+
+        if job.status == JobStatus.TEST_SENT:
+            return jsonify(success=True, job_id=job.id, status=job.status, already_sent=True, recipients=mail_sender.get_test_recipient_emails())
 
         if job.status != JobStatus.EMAIL_APPROVED:
             return jsonify(success=False, error=f"Job must be in EMAIL_APPROVED state to run the Stage 06 test send. Current state: {job.status}"), 400
@@ -350,18 +363,25 @@ def create_app(test_config=None):
             return jsonify(success=False, error="No Stage 06 executive test recipients are configured."), 400
 
         try:
-            message = mail_sender.build_message_for_job(
-                sender_identity=session["gmail_sender"],
-                job=job,
-                recipients=recipients,
-            )
-            result = mail_sender.send_mime_message(session["gmail_sender"], message)
+            result = mail_sender.send_batch_to_recipients(session["gmail_sender"], job, recipients)
         except mail_sender.GmailSenderError as error:
             return jsonify(success=False, error=str(error)), 502
 
-        job.status = JobStatus.TEST_SENT
+        if result["success"]:
+            job.status = JobStatus.TEST_SENT
+            db.session.commit()
+        return jsonify(success=result["success"], job_id=job.id, status=job.status, send=result, recipients=recipients)
+
+    @app.post("/api/jobs/<int:job_id>/test/approve")
+    def approve_stage_06(job_id):
+        job = db.session.get(EmailJob, job_id)
+        if job is None:
+            return jsonify(success=False, error="Email job not found."), 404
+        if job.status != JobStatus.TEST_SENT:
+            return jsonify(success=False, error=f"Stage 06 must complete successfully before moving to Stage 07. Current state: {job.status}"), 400
+        job.status = JobStatus.TEST_APPROVED
         db.session.commit()
-        return jsonify(success=True, job_id=job.id, status=job.status, send=result)
+        return jsonify(success=True, job_id=job.id, status=job.status)
 
     @app.post("/api/jobs/<int:job_id>/final-send")
     def send_final_email(job_id):
@@ -372,8 +392,8 @@ def create_app(test_config=None):
         if not session.get("gmail_sender"):
             return jsonify(success=False, error="A Gmail sender must be authenticated before Stage 07 final send."), 403
 
-        if job.status != JobStatus.TEST_APPROVED:
-            return jsonify(success=False, error=f"Job must be in TEST_APPROVED state to send the final email. Current state: {job.status}"), 400
+        if job.status not in (JobStatus.TEST_SENT, JobStatus.TEST_APPROVED):
+            return jsonify(success=False, error=f"Job must be in TEST_SENT or TEST_APPROVED state to send the final email. Current state: {job.status}"), 400
 
         if not job.email_html:
             return jsonify(success=False, error="Final approved email HTML is missing."), 400
@@ -383,18 +403,14 @@ def create_app(test_config=None):
             return jsonify(success=False, error="No final recipient list is configured."), 400
 
         try:
-            message = mail_sender.build_message_for_job(
-                sender_identity=session["gmail_sender"],
-                job=job,
-                recipients=recipients,
-            )
-            result = mail_sender.send_mime_message(session["gmail_sender"], message)
+            result = mail_sender.send_batch_to_recipients(session["gmail_sender"], job, recipients)
         except mail_sender.GmailSenderError as error:
             return jsonify(success=False, error=str(error)), 502
 
-        job.status = JobStatus.FINAL_SENT
-        db.session.commit()
-        return jsonify(success=True, job_id=job.id, status=job.status, send=result)
+        if result["success"]:
+            job.status = JobStatus.FINAL_SENT
+            db.session.commit()
+        return jsonify(success=result["success"], job_id=job.id, status=job.status, send=result, recipients=recipients)
 
     @app.put("/api/jobs/<int:job_id>/email/content")
     def update_job_email_content(job_id):

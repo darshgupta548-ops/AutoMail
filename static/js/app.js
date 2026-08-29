@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const telemetryPill = document.getElementById('telemetry-pill');
   const telemetryJobName = document.getElementById('telemetry-job-name');
   const pastJobsGrid = document.getElementById('past-jobs-grid');
+  const pipelineStageContent = document.getElementById('pipeline-stage-content');
+  const pipelineActions = document.getElementById('pipeline-actions');
 
   const gmailConnectBtn = document.getElementById('gmail-connect-btn');
   const gmailLogoutBtn = document.getElementById('gmail-logout-btn');
@@ -53,6 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const telemetryModal = document.getElementById('telemetry-modal');
   const telemetryStatusMsg = document.getElementById('telemetry-status-msg');
   const regenConfirmModal = document.getElementById('regen-confirm-modal');
+  const testConfirmModal = document.getElementById('test-confirm-modal');
+  const testConfirmList = document.getElementById('test-confirm-list');
   const toastContainer = document.getElementById('toast-container');
 
   // Forms & Inputs
@@ -76,7 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnTriggerRegen = document.getElementById('btn-trigger-regen');
   const btnCancelRegen = document.getElementById('btn-cancel-regen');
   const btnConfirmRegen = document.getElementById('btn-confirm-regen');
-  const btnPipelineReturn = document.getElementById('btn-pipeline-return');
+  const btnCancelTestSend = document.getElementById('btn-cancel-test-send');
+  const btnConfirmTestSend = document.getElementById('btn-confirm-test-send');
 
   
   // Email Review Elements
@@ -314,6 +319,273 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  async function apiFetchTestRecipients() {
+    try {
+      const res = await fetch('/api/transmission/test-recipients');
+      return await res.json();
+    } catch (err) {
+      return { success: false, recipients: [], error: 'Unable to load test recipients.' };
+    }
+  }
+
+  function sanitizeHtmlList(items) {
+    return (items || []).map(item => `<li>${item}</li>`).join('');
+  }
+
+  function renderPipelineActions(buttonMarkup) {
+    pipelineActions.innerHTML = buttonMarkup;
+  }
+
+  async function renderPipelineStage(job) {
+    if (!job) return;
+
+    const testRecipientsResponse = await apiFetchTestRecipients();
+    const testRecipients = testRecipientsResponse.success ? testRecipientsResponse.recipients : [];
+    const previewHtml = job.email_html || '<html><body><p>No approved email content is available.</p></body></html>';
+
+    if (job.status === 'EMAIL_APPROVED') {
+      pipelineStageContent.innerHTML = `
+        <div class="stage-header" style="display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; flex-wrap: wrap;">
+          <div>
+            <span class="section-tag" style="margin-bottom: 8px; display: inline-block;">// EXECUTIVE TRANSMISSION READY</span>
+            <h2 class="panel-title" style="font-size: 28px; margin: 0;">EXECUTIVE TEST TRANSMISSION</h2>
+          </div>
+          <span class="status-badge badge-approved">● AUTHORIZATION READY</span>
+        </div>
+
+        <p style="color: var(--text-muted); margin-bottom: 24px; max-width: 760px; line-height: 1.6;">
+          The generated email is ready for executive verification. A test copy will be sent to the configured executive test recipients.
+        </p>
+
+        <div class="form-grid" style="margin-bottom: 24px;">
+          <div class="space-panel" style="padding: 18px; border: 1px solid var(--border-subtle);">
+            <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">TEST RECIPIENTS</span>
+            <ul style="margin: 0; padding-left: 18px; color: var(--text-bright); line-height: 1.8;">
+              ${sanitizeHtmlList(testRecipients.length ? testRecipients : ['No recipients configured'])}
+            </ul>
+          </div>
+        </div>
+
+        <div class="space-panel" style="padding: 18px; border: 1px solid var(--border-subtle); margin-bottom: 20px;">
+          <span class="section-tag" style="display: inline-block; margin-bottom: 10px;">EMAIL PREVIEW</span>
+          <div class="iframe-wrapper desktop-mode" style="height: 500px; border: 1px solid var(--border-subtle); background: #fff;">
+            <iframe sandbox="allow-same-origin" title="Stage 06 email preview" srcdoc="${previewHtml.replace(/"/g, '&quot;')}"></iframe>
+          </div>
+        </div>
+      `;
+
+      renderPipelineActions(`
+        <button type="button" class="btn-mission btn-mission-secondary" id="btn-pipeline-return">RETURN TO DASHBOARD</button>
+        <button type="button" class="btn-mission btn-mission-primary" id="btn-trigger-test-send">SEND TEST EMAILS</button>
+      `);
+
+      const triggerTestBtn = document.getElementById('btn-trigger-test-send');
+      const pipelineReturnBtn = document.getElementById('btn-pipeline-return');
+      triggerTestBtn.addEventListener('click', openTestConfirmation);
+      pipelineReturnBtn.addEventListener('click', () => {
+        apiFetchJobs();
+        switchView('dashboard', 1);
+      });
+      return;
+    }
+
+    if (job.status === 'TEST_SENT') {
+      pipelineStageContent.innerHTML = `
+        <div class="status-panel success" style="padding: 26px; border: 1px solid rgba(79, 209, 197, 0.4); border-radius: var(--radius-md); background: rgba(12, 25, 35, 0.7);">
+          <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">// TEST TRANSMISSION COMPLETE</span>
+          <h2 class="panel-title" style="margin: 0 0 12px; font-size: 30px;">TEST TRANSMISSION COMPLETE</h2>
+          <p style="color: var(--text-muted); margin-bottom: 18px; line-height: 1.6;">
+            ${testRecipients.length} executive test recipient(s) received the approved email successfully through the authenticated Gmail account.
+          </p>
+          <div style="display: grid; gap: 10px; margin-bottom: 18px;">
+            <div><strong>RECIPIENTS</strong><br><span style="color: var(--text-bright);">${testRecipients.join(', ')}</span></div>
+            <div><strong>TIMESTAMP</strong><br><span style="color: var(--text-bright);">${new Date().toLocaleString()}</span></div>
+            <div><strong>GMAIL STATUS</strong><br><span style="color: var(--status-connected);">GMAIL API SUCCESS</span></div>
+          </div>
+        </div>
+      `;
+
+      renderPipelineActions(`
+        <button type="button" class="btn-mission btn-mission-primary" id="btn-proceed-to-send">PROCEED TO SEND</button>
+      `);
+
+      document.getElementById('btn-proceed-to-send').addEventListener('click', async () => {
+        try {
+          const res = await fetch(`/api/jobs/${job.id}/test/approve`, { method: 'POST' });
+          const data = await res.json();
+          if (!data.success) {
+            showToast(data.error || 'Unable to advance to final send.');
+            return;
+          }
+          state.activeJob.status = data.status;
+          await renderPipelineStage(state.activeJob);
+        } catch (err) {
+          showToast('Unable to advance to the final send stage.');
+        }
+      });
+      return;
+    }
+
+    if (job.status === 'TEST_APPROVED') {
+      const finalRecipientsResponse = await fetch('/api/transmission/final-recipients');
+      const finalRecipientsData = finalRecipientsResponse.ok ? await finalRecipientsResponse.json() : { recipients: [] };
+      const finalRecipients = finalRecipientsData.recipients || [];
+
+      pipelineStageContent.innerHTML = `
+        <div class="status-panel" style="padding: 26px; border: 1px solid rgba(90, 160, 255, 0.35); border-radius: var(--radius-md); background: rgba(8, 20, 31, 0.7);">
+          <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">// FINAL SEND READY</span>
+          <h2 class="panel-title" style="margin: 0 0 12px; font-size: 30px;">FINAL TRANSMISSION PREPARED</h2>
+          <p style="color: var(--text-muted); margin-bottom: 18px; line-height: 1.6;">
+            The executive test send succeeded. The approved email is ready for the configured final delivery recipient.
+          </p>
+          <div class="space-panel" style="padding: 18px; border: 1px solid var(--border-subtle); margin-bottom: 16px;">
+            <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">FINAL RECIPIENT</span>
+            <ul style="margin: 0; padding-left: 18px; color: var(--text-bright); line-height: 1.8;">
+              ${sanitizeHtmlList(finalRecipients.length ? finalRecipients : ['No final recipient configured'])}
+            </ul>
+          </div>
+          <div class="iframe-wrapper desktop-mode" style="height: 420px; border: 1px solid var(--border-subtle); background: #fff;">
+            <iframe sandbox="allow-same-origin" title="Final email preview" srcdoc="${previewHtml.replace(/"/g, '&quot;')}"></iframe>
+          </div>
+        </div>
+      `;
+
+      renderPipelineActions(`
+        <button type="button" class="btn-mission btn-mission-secondary" id="btn-pipeline-return">RETURN TO DASHBOARD</button>
+        <button type="button" class="btn-mission btn-mission-primary" id="btn-trigger-final-send">SEND FINAL EMAIL</button>
+      `);
+
+      document.getElementById('btn-trigger-final-send').addEventListener('click', async () => {
+        const res = await fetch(`/api/jobs/${job.id}/final-send`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          state.activeJob.status = data.status;
+          showToast('Final email transmission sent successfully.');
+          await renderPipelineStage(state.activeJob);
+        } else {
+          showToast(data.error || 'Final send failed.');
+        }
+      });
+
+      document.getElementById('btn-pipeline-return').addEventListener('click', () => {
+        apiFetchJobs();
+        switchView('dashboard', 1);
+      });
+      return;
+    }
+
+    if (job.status === 'FINAL_SENT') {
+      pipelineStageContent.innerHTML = `
+        <div class="status-panel success" style="padding: 24px; border: 1px solid rgba(79, 209, 197, 0.4); border-radius: var(--radius-md); background: rgba(12, 25, 35, 0.7);">
+          <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">// FINAL MESSAGE DISPATCHED</span>
+          <h2 class="panel-title" style="margin: 0 0 12px; font-size: 30px;">FINAL TRANSMISSION COMPLETE</h2>
+          <p style="color: var(--text-muted);">The final approved email was sent successfully through the authenticated Gmail account.</p>
+        </div>
+      `;
+      renderPipelineActions(`<button type="button" class="btn-mission btn-mission-secondary" id="btn-pipeline-return">RETURN TO DASHBOARD</button>`);
+      document.getElementById('btn-pipeline-return').addEventListener('click', () => {
+        apiFetchJobs();
+        switchView('dashboard', 1);
+      });
+      return;
+    }
+
+    pipelineStageContent.innerHTML = `
+      <div class="space-panel" style="text-align: center; padding: 60px 40px;">
+        <div style="font-size: 48px; color: var(--cyan-primary); margin-bottom: 16px;">✨</div>
+        <h2 class="panel-title" style="font-size: 24px; margin-bottom: 12px;">MISSION STATUS: ${job.status}</h2>
+        <p style="color: var(--text-muted); max-width: 540px; margin: 0 auto 28px auto;">The workflow is active and ready for the next transmission stage.</p>
+      </div>
+    `;
+    renderPipelineActions(`<button type="button" class="btn-mission btn-mission-secondary" id="btn-pipeline-return">RETURN TO DASHBOARD</button>`);
+    document.getElementById('btn-pipeline-return').addEventListener('click', () => {
+      apiFetchJobs();
+      switchView('dashboard', 1);
+    });
+  }
+
+  function openTestConfirmation() {
+    if (!state.activeJob) return;
+    apiFetchTestRecipients().then((data) => {
+      const recipients = data.success ? data.recipients : [];
+      testConfirmList.innerHTML = recipients.map((recipient) => `<li>${recipient}</li>`).join('');
+      testConfirmModal.classList.add('active');
+    });
+  }
+
+  async function submitTestEmailSend() {
+    if (!state.activeJob) return;
+
+    const submitButton = document.getElementById('btn-confirm-test-send');
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = 'TRANSMITTING TEST EMAILS...';
+    }
+
+    testConfirmModal.classList.remove('active');
+    startTelemetryLoader(['PREPARING TEST DISPATCH...', 'CONNECTING TO GMAIL API...', 'TRANSMITTING EXECUTIVE COPIES...']);
+
+    try {
+      const res = await fetch(`/api/jobs/${state.activeJob.id}/test-send`, { method: 'POST' });
+      const data = await res.json();
+      stopTelemetryLoader();
+
+      if (data.success) {
+        state.activeJob.status = data.status;
+        if (data.already_sent) {
+          showToast('This test transmission was already completed.');
+        }
+        await renderPipelineStage(state.activeJob);
+        showToast('Test transmission complete.');
+      } else {
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = 'SEND TEST';
+        }
+        pipelineStageContent.innerHTML = `
+          <div class="status-panel error" style="padding: 26px; border: 1px solid rgba(255, 112, 112, 0.45); border-radius: var(--radius-md); background: rgba(28, 16, 16, 0.7);">
+            <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">// TEST TRANSMISSION FAILED</span>
+            <h2 class="panel-title" style="margin: 0 0 12px; font-size: 30px;">TEST TRANSMISSION FAILED</h2>
+            <p style="color: var(--text-muted); margin-bottom: 12px;">${(data.error || 'The Gmail API rejected the test transmission.').replace(/\n/g, ' ')}</p>
+          </div>
+        `;
+        renderPipelineActions(`
+          <button type="button" class="btn-mission btn-mission-secondary" id="btn-pipeline-return">RETURN TO DASHBOARD</button>
+          <button type="button" class="btn-mission btn-mission-primary" id="btn-retry-test-send">RETRY TEST</button>
+        `);
+        document.getElementById('btn-retry-test-send').addEventListener('click', openTestConfirmation);
+        document.getElementById('btn-pipeline-return').addEventListener('click', () => {
+          apiFetchJobs();
+          switchView('dashboard', 1);
+        });
+        showToast(data.error || 'Test transmission failed.');
+      }
+    } catch (err) {
+      stopTelemetryLoader();
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'SEND TEST';
+      }
+      pipelineStageContent.innerHTML = `
+        <div class="status-panel error" style="padding: 26px; border: 1px solid rgba(255, 112, 112, 0.45); border-radius: var(--radius-md); background: rgba(28, 16, 16, 0.7);">
+          <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">// TEST TRANSMISSION FAILED</span>
+          <h2 class="panel-title" style="margin: 0 0 12px; font-size: 30px;">TEST TRANSMISSION FAILED</h2>
+          <p style="color: var(--text-muted);">A network or Gmail API error prevented the test from sending.</p>
+        </div>
+      `;
+      renderPipelineActions(`
+        <button type="button" class="btn-mission btn-mission-secondary" id="btn-pipeline-return">RETURN TO DASHBOARD</button>
+        <button type="button" class="btn-mission btn-mission-primary" id="btn-retry-test-send">RETRY TEST</button>
+      `);
+      document.getElementById('btn-retry-test-send').addEventListener('click', openTestConfirmation);
+      document.getElementById('btn-pipeline-return').addEventListener('click', () => {
+        apiFetchJobs();
+        switchView('dashboard', 1);
+      });
+      showToast('Test transmission failed.');
+    }
+  }
+
   // =========================================================================
   // DASHBOARD RENDERER
   // =========================================================================
@@ -399,6 +671,7 @@ document.addEventListener('DOMContentLoaded', () => {
           populateEmailReview(data.job);
           switchView('emailReview', 5);
         } else if (data.job.status === 'EMAIL_APPROVED' || data.job.status.includes('TEST') || data.job.status.includes('FINAL')) {
+          renderPipelineStage(data.job);
           switchView('pipelinePreview', 6);
         } else if (data.job.status === 'CONTEXT_GENERATED' || data.job.status === 'CONTEXT_APPROVED') {
           populateContextEditor(data.job.email_context);
@@ -1031,6 +1304,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (res.success) {
         state.activeJob.status = res.status;
         showToast('EMAIL APPROVED. TRANSMISSION AUTHORIZED.');
+        renderPipelineStage(state.activeJob);
         switchView('pipelinePreview', 6);
       } else {
         showToast(`Approval failed: ${res.error}`);
@@ -1097,10 +1371,11 @@ document.addEventListener('DOMContentLoaded', () => {
     switchView('dashboard', 1);
   });
 
-  btnPipelineReturn.addEventListener('click', () => {
-    apiFetchJobs();
-    switchView('dashboard', 1);
+  btnCancelTestSend.addEventListener('click', () => {
+    testConfirmModal.classList.remove('active');
   });
+
+  btnConfirmTestSend.addEventListener('click', submitTestEmailSend);
 
   gmailConnectBtn.addEventListener('click', () => {
     window.location.href = '/api/gmail/connect';

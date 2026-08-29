@@ -2,6 +2,7 @@
 
 import base64
 import os
+import re
 import secrets
 import time
 from datetime import datetime
@@ -224,14 +225,59 @@ def send_mime_message(sender_identity, mime_message):
     creds = _credentials_from_token_data(token_data)
     service = build("gmail", "v1", credentials=creds)
 
-    raw_payload = base64.urlsafe_b64encode(mime_message.as_bytes()).decode("ascii").rstrip("=")
-    response = service.users().messages().send(userId="me", body={"raw": raw_payload}).execute()
+    try:
+        raw_payload = base64.urlsafe_b64encode(mime_message.as_bytes()).decode("ascii").rstrip("=")
+        response = service.users().messages().send(userId="me", body={"raw": raw_payload}).execute()
+        return {
+            "success": True,
+            "message_id": response.get("id"),
+            "thread_id": response.get("threadId"),
+            "status": "sent",
+        }
+    except Exception as exc:
+        raise GmailSenderError(f"Gmail API rejected the transmission: {exc}") from exc
 
+
+def _validate_recipient_email(value):
+    candidate = str(value or "").strip()
+    if not candidate:
+        raise GmailSenderError("Recipient email is required.")
+    if "\n" in candidate or "\r" in candidate:
+        raise GmailSenderError("Recipient email contains invalid header characters.")
+    if not re.fullmatch(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$", candidate):
+        raise GmailSenderError(f"Invalid recipient email address: {candidate}")
+    return candidate
+
+
+def send_batch_to_recipients(sender_identity, job, recipients):
+    """Send the approved email to the configured recipients and return per-recipient results."""
+    clean_recipients = []
+    for recipient in recipients or []:
+        clean_recipients.append(_validate_recipient_email(recipient))
+
+    if not clean_recipients:
+        raise GmailSenderError("No valid recipients are configured for the transmission.")
+
+    results = []
+    for recipient in clean_recipients:
+        try:
+            mime_message = build_message_for_job(
+                sender_identity=sender_identity,
+                job=job,
+                recipients=[recipient],
+            )
+            result = send_mime_message(sender_identity, mime_message)
+            results.append({"recipient": recipient, "success": True, "message_id": result.get("message_id")})
+        except GmailSenderError as exc:
+            results.append({"recipient": recipient, "success": False, "error": str(exc)})
+
+    success_count = sum(1 for result in results if result.get("success"))
     return {
-        "success": True,
-        "message_id": response.get("id"),
-        "thread_id": response.get("threadId"),
-        "status": "sent",
+        "success": success_count == len(clean_recipients),
+        "sent_count": success_count,
+        "total_count": len(clean_recipients),
+        "results": results,
+        "status": "partial_failure" if success_count and success_count != len(clean_recipients) else ("sent" if success_count else "failed"),
     }
 
 
@@ -254,5 +300,8 @@ def _split_recipient_list(raw_value):
     for item in raw_value.replace(";", ",").split(","):
         value = item.strip()
         if value:
-            values.append(value)
+            try:
+                values.append(_validate_recipient_email(value))
+            except GmailSenderError:
+                continue
     return values

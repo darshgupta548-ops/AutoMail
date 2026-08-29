@@ -421,22 +421,17 @@
       </div>
     </section>
 
-    <!-- VIEW 5: FUTURE PIPELINE STAGES (STAGE 06-07) -->
+    <!-- VIEW 5: STAGE 06 TEST + STAGE 07 FINAL SEND -->
     <section class="view-section" id="view-pipeline-preview">
       <div class="editorial-header">
-        <span class="section-tag">// STAGE 04-07 — EMAIL BUILD & TRANSMISSION</span>
-        <h1 class="editorial-title" id="pipeline-stage-title">YOUR MISSION IS READY</h1>
-        <p class="editorial-subtitle">Structured context has been approved. The email renderer and test mail pipeline will generate the responsive design next.</p>
+        <span class="section-tag">// STAGE 06 — TEST TRANSMISSION</span>
+        <h1 class="editorial-title" id="pipeline-stage-title">EXECUTIVE TEST TRANSMISSION</h1>
+        <p class="editorial-subtitle" id="pipeline-stage-subtitle">The generated email is ready for executive verification. A test copy will be sent to the configured executive test recipients.</p>
       </div>
 
-      <div class="space-panel" style="text-align: center; padding: 60px 40px;">
-        <div style="font-size: 48px; color: var(--cyan-primary); margin-bottom: 16px;">✨</div>
-        <h2 class="panel-title" style="font-size: 24px; margin-bottom: 12px;">CONTEXT APPROVED & READY FOR RENDER</h2>
-        <p style="color: var(--text-muted); max-width: 540px; margin: 0 auto 28px auto;">
-          The backend status is updated to <strong style="color: var(--status-approved);" id="pipeline-status-badge">CONTEXT_APPROVED</strong>. The next phases (Email Maker rendering, Inbox Verification, and Resend final send) will consume this approved context.
-        </p>
-
-        <button class="btn-mission btn-mission-primary" id="btn-pipeline-return">RETURN TO MISSION DASHBOARD</button>
+      <div class="space-panel" style="padding: 30px 24px;">
+        <div id="pipeline-stage-content"></div>
+        <div class="pipeline-actions" id="pipeline-actions" style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; flex-wrap: wrap;"></div>
       </div>
     </section>
 
@@ -461,6 +456,18 @@
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
         <button class="btn-mission btn-mission-secondary btn-sm" id="btn-cancel-regen">CANCEL</button>
         <button class="btn-mission btn-mission-danger btn-sm" id="btn-confirm-regen">GENERATE NEW VERSION</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="test-confirm-modal">
+    <div class="telemetry-card" style="max-width: 520px; text-align: left;">
+      <h3 style="font-family: var(--font-heading); font-size: 20px; color: var(--text-bright); margin-bottom: 12px;">Send this test email to the configured executive test recipients?</h3>
+      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 16px;">The email will be delivered through the authenticated Gmail account only to the Stage 06 test recipients.</p>
+      <ul id="test-confirm-list" style="color: var(--text-bright); margin: 0 0 20px 18px; line-height: 1.8;"></ul>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button class="btn-mission btn-mission-secondary btn-sm" id="btn-cancel-test-send">CANCEL</button>
+        <button class="btn-mission btn-mission-primary btn-sm" id="btn-confirm-test-send">SEND TEST</button>
       </div>
     </div>
   </div>

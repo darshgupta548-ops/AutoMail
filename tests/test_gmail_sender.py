@@ -168,6 +168,37 @@ def test_stage_07_final_send_requires_auth_and_configured_recipients(client, app
     assert "No final recipient" in response.get_json()["error"]
 
 
+def test_stage_06_uses_only_test_recipients(client, app, job_data, monkeypatch):
+    job_id = _create_rendered_job(client, job_data)
+    with app.app_context():
+        from models.email_job import EmailJob
+        job = db.session.get(EmailJob, job_id)
+        job.status = "EMAIL_APPROVED"
+        db.session.commit()
+
+    with client.session_transaction() as session:
+        session["gmail_sender"] = {"email": "brahmand@gmail.com", "token": {"access_token": "abc"}}
+
+    captured = {}
+
+    def fake_send_batch(sender_identity, job_instance, recipients):
+        captured["recipients"] = list(recipients)
+        return {"success": True, "sent_count": len(recipients), "results": [], "status": "sent"}
+
+    monkeypatch.setattr(mail_sender, "send_batch_to_recipients", fake_send_batch)
+    response = client.post(f"/api/jobs/{job_id}/test-send")
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+    assert captured["recipients"] == ["president@example.com", "vp@example.com", "admin@example.com"]
+    assert "it-admin@example.com" not in captured["recipients"]
+
+
+def test_stage_06_recipients_are_validated_and_parsed(monkeypatch):
+    monkeypatch.setenv("TEST_SEND_RECIPIENTS", " president@example.com, newline\nattack@example.com ; vp@example.com, bad-address ")
+    recipients = mail_sender.get_test_recipient_emails()
+    assert recipients == ["president@example.com", "vp@example.com"]
+
+
 def test_mail_sender_builds_mime_for_job():
     sender = {"email": "brahmand@gmail.com", "display_name": "Brahmand Astronomy Club", "token": {"access_token": "abc"}}
     job = SimpleNamespace(email_html="<html><body><h1>Unicode — 星空</h1></body></html>", email_context={"subject": "Unicode subject"})
