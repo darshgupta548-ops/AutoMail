@@ -21,26 +21,34 @@ Email Maker
    │
    │ Human Review (STAGE 05)
    ▼
+Authenticated Gmail Sender
+   │
+   ▼
 MIME Builder
    │
-   │ Test Transmission (STAGE 06)
    ▼
 Gmail Sender
-   │ (future implementation)
    │
    ▼
-Executive Reviewers
-   (President, VP, Me)
-   │
-   │ External Approval
-   ▼
-IT Admin
+Gmail API
    │
    ▼
-Final Transmission
+Brahmand Gmail Account
    │
    ▼
-Students
+Test Send (STAGE 06)
+   ├── President / VP / Administrator
+   │
+   └── External confirmation
+             │
+             ▼
+        Final Transmission (STAGE 07)
+             │
+             ▼
+            IT Admin
+             │
+             ▼
+          Final Recipients
 ```
 
 ## 3. Low-Level Architecture
@@ -123,10 +131,26 @@ Construct a standards-compliant MIME/RFC 2822 email message from the final appro
 - UI logic
 - Email regeneration or editing
 
-### 4.11 Gmail Sender (Future)
-Submit the MIME message through Gmail API to the Brahmand Gmail account and deliver to intended recipients.
+### 4.11 Authenticated Gmail Sender
+The authenticated Gmail account is the single source of truth for the sender identity used by both Stage 06 and Stage 07. It is stored in the backend session and surfaced to the frontend as a read-only connected account.
 
-### 4.12 Test Send (STAGE 06)
+**Responsibilities:**
+- Request and validate Google OAuth consent
+- Refresh access tokens when required
+- Resolve sender email + display name + profile image
+- Expose a safe backend state representation to the UI
+- Provide logout flows that invalidate the account session
+
+**NOT responsible for:**
+- HTML generation
+- UI rendering
+- email editing
+- arbitrary From selection from the client
+
+### 4.12 Gmail Sender / Gmail API
+Submit the MIME message through Gmail API with the authenticated Gmail account as the sender identity.
+
+### 4.13 Test Send (STAGE 06)
 Send the formatted message to exactly three executive reviewers:
 1. President
 2. Vice President
@@ -141,8 +165,8 @@ Executives inspect the actual received email to verify:
 
 External confirmation (chat, video call, in-person) constitutes approval.
 
-### 4.13 Final Send
-After executive approval via external communication, IT Admin authorizes final transmission to the intended recipient list.
+### 4.14 Final Send (STAGE 07)
+After executive approval via external communication, IT Admin authorizes final transmission to the intended recipient list. The final send uses the same authenticated Gmail identity but targets the configured final recipient list instead of the executive test recipients.
 
 ## 5. Data Contracts
 

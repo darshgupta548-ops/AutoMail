@@ -279,9 +279,12 @@ def test_approve_email_successfully_updates_job(client, job_payload):
     job_id = client.post("/api/jobs", json=job_payload).get_json()["job"]["id"]
     client.put(f"/api/jobs/{job_id}/context", json=VALID_CONTEXT)
     client.post(f"/api/jobs/{job_id}/email/generate")
-    
+
+    with client.session_transaction() as session:
+        session["gmail_sender"] = {"email": "brahmand@gmail.com", "token": {"access_token": "abc"}}
+
     response = client.post(f"/api/jobs/{job_id}/email/approve")
-    
+
     assert response.status_code == 200
     data = response.get_json()
     assert data["success"] is True

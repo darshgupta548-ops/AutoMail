@@ -14,7 +14,8 @@
 | Image Hosting | Cloudinary | Host posters/logos and provide HTTPS asset URLs |
 | Email Maker | HTML + CSS + Jinja | Generate email-safe responsive HTML from approved context |
 | MIME Builder | Python email module | Construct RFC 2822 messages with MIME/multipart structure |
-| Email Transport | Gmail API | Deliver formatted messages through Brahmand Gmail account |
+| Email Transport | Gmail API | Deliver formatted messages through the authenticated Brahmand Gmail account |
+| OAuth / Identity | Google OAuth 2.0 | Authenticate the sender account and resolve the caller's profile/email |
 | Documentation | Markdown | Specification, architecture, workflow, decisions, README |
 | Version Control | Git + GitHub | Source control and project history |
 | Testing | Python test framework + real inbox testing | Automated checks plus real email-client verification |
@@ -72,6 +73,8 @@ Responsibilities include:
 - calling Gmail API for delivery (future).
 
 Flask keeps the external services behind application-specific modules rather than exposing provider-specific logic throughout the frontend.
+
+The backend owns the Gmail OAuth flow and the authenticated sender session. The frontend may display the connected account name, email, and avatar, but the actual sender identity is resolved and validated server-side.
 
 ---
 

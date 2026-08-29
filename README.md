@@ -40,7 +40,7 @@ Renders final responsive HTML email from approved context using:
 - Organization logos
 - Event-specific assets
 
-### 3. MIME Builder (`services/mime_builder.py`) — **NEW**
+### 3. MIME Builder (`services/mime_builder.py`)
 Constructs standards-compliant RFC 2822 email messages from approved HTML:
 - Multipart/alternative structure
 - Auto-generated plain-text alternative
@@ -48,12 +48,13 @@ Constructs standards-compliant RFC 2822 email messages from approved HTML:
 - Header injection prevention
 - Base64url encoding for Gmail API
 
-### 4. Gmail Sender (`services/mail_sender.py`) — *Future Implementation*
-Sends formatted messages through Gmail API:
-- Brahmand Gmail account
-- Production delivery
-- Test send to executives
-- Final transmission
+### 4. Gmail Auth + Sender (`services/mail_sender.py`)
+Authenticates and manages the active Gmail identity used for transmission:
+- Google OAuth for the Brahmand Gmail account
+- backend-owned sender identity and session state
+- profile image, display name, and email surfaced to the frontend
+- logout and credential expiry handling
+- provider-specific Gmail sending through the authenticated account
 
 ## Documentation
 
@@ -61,6 +62,7 @@ Sends formatted messages through Gmail API:
 - [TECH_STACK.md](Docs/TECH_STACK.md) — Technology choices and rationale
 - [DECISIONS.md](Docs/DECISIONS.md) — Architecture decisions and trade-offs
 - [MIME_BUILDER.md](Docs/MIME_BUILDER.md) — MIME Builder module documentation
+- [GMAIL_SENDER.md](Docs/GMAIL_SENDER.md) — Gmail OAuth, sender identity, and transport architecture
 - [SPEC.md](Docs/SPEC.md) — Requirements and acceptance criteria
 
 ## Testing
@@ -86,14 +88,15 @@ Current test coverage:
 - [x] Stage 05 verification
 - [x] MIME Builder (message construction)
 
-### 🔄 In Progress
-- [ ] Gmail OAuth integration
-- [ ] Gmail Sender implementation
-- [ ] Stage 06 test send flow
+### ✅ Implemented
+- [x] Gmail OAuth integration
+- [x] Gmail sender identity/session management
+- [x] Stage 06 transport gating and Gmail delivery wrapper
+- [x] Stage 07 final send flow enforcement
 
 ### 📋 Future
-- [ ] Stage 07 final transmission
-- [ ] Delivery reporting
+- [ ] Inbox read / Gmail management features
+- [ ] Delivery reporting and analytics
 - [ ] Multi-language support
 - [ ] Attachment support
 
@@ -106,11 +109,16 @@ GOOGLE_API_KEY=your_gemini_api_key
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
-BRAHMAND_EMAIL_ADDRESS=events@brahmand.edu
-PRESIDENT_EMAIL=president@brahmand.edu
-VP_EMAIL=vp@brahmand.edu
-ADMIN_EMAIL=admin@brahmand.edu
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
+GOOGLE_REDIRECT_URI=https://your-domain.example.com/api/gmail/callback
+GOOGLE_OAUTH_SCOPES=openid email profile https://www.googleapis.com/auth/gmail.send
+TEST_SEND_RECIPIENTS=president@example.com,vice-president@example.com,administrator@example.com
+FINAL_SEND_RECIPIENTS=it-admin@example.com
+FLASK_SECRET_KEY=change-this-for-local-dev
 ```
+
+Do not commit real client secrets or tokens. Use `.env` locally and keep OAuth credential material out of source control.
 
 ## Running the Application
 
@@ -178,27 +186,28 @@ Final message follows RFC 2822 standard with multipart/alternative structure (HT
 - HTTPS-only asset URLs
 - OAuth for Gmail authentication (future)
 
-## Next Steps for Development
+## Current Backend Gmail Flow
 
-1. **Gmail OAuth Integration**
-   - Implement service account authentication
-   - Configure OAuth scopes for sending emails
-   - Test credential rotation
+1. **Google OAuth**
+   - `/api/gmail/connect` starts the server-side OAuth flow.
+   - `/api/gmail/callback` validates the state and exchanges the authorization code.
+   - The authenticated sender identity is stored in the Flask session, not in the frontend.
 
-2. **Gmail Sender Module**
-   - Implement `mail_sender.send_message(raw_mime)`
-   - Handle API errors and retries
-   - Log delivery status
+2. **Sender Identity**
+   - The backend resolves the authenticated account profile and caches:
+     - email address
+     - display name
+     - profile image URL
+     - OAuth token state
 
-3. **Stage 06 Test Send Endpoint**
-   - Create `/api/jobs/<id>/email/send-test` endpoint
-   - Send to President, VP, Administrator emails
-   - Update job status to TEST_SENT
+3. **Stage 06 / Stage 07**
+   - The same authenticated Gmail account is used for both test send and final send.
+   - No editable From field is exposed to the frontend.
+   - The system blocks transmission when no Gmail sender is connected.
 
-4. **Stage 07 Final Transmission**
-   - Implement IT Admin authorization workflow
-   - Implement final send endpoint
-   - Track delivery confirmations
+4. **MIME Builder integration**
+   - `mail_sender.build_message_for_job()` prepares the final RFC 2822 MIME message.
+   - The Gmail sender uses the MIME output as the transport payload.
 
 ## Support
 

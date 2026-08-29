@@ -49,6 +49,8 @@ The production email transport layer uses Gmail API to send through the Brahmand
 - Leverages existing institutional Gmail infrastructure.
 - Flexibility for future bulk/scheduled transmission improvements.
 
+**Security note:** OAuth is handled server-side and the authenticated sender identity is stored in the Flask session rather than in the frontend.
+
 ## D8 — MIME Builder for Message Construction
 Before Gmail API integration, the MIME Builder module constructs standards-compliant RFC 2822 messages from the final approved HTML.
 
@@ -109,3 +111,12 @@ After Stage 05 email approval, a real email is sent via Gmail API to three execu
 
 ## D14 — In-Email Theme Toggle Deferred
 An interactive Light/Dark control inside the received email is an experimental future feature because email-client support is inconsistent. It is not a guaranteed MVP feature.
+
+## D15 — Backend-Owned Gmail Sender Identity
+The authenticated Gmail account is the single source of truth for the sender identity and is not directly editable by the client.
+
+**Reason:**
+- Sender identity must remain consistent across Stage 06 and Stage 07.
+- The app must never allow the frontend to override or spoof the From address.
+- OAuth state and tokens are handled on the backend with minimal required Gmail scopes.
+- The UI can present the account status to the user without exposing secrets or refresh tokens.

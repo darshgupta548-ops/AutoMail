@@ -1,14 +1,15 @@
 """Flask application and minimal API for AUTO-MAIL email jobs."""
 
+import os
 from datetime import date, time
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, session
 
 from extensions import db
 from models.email_context import EmailContext
 from models.email_job import EmailJob, JobStatus
-from services import asset_service, email_maker, sense_maker
+from services import asset_service, email_maker, mail_sender, sense_maker
 
 
 def _parse_date(value):
@@ -72,6 +73,7 @@ def create_app(test_config=None):
     app.config.from_mapping(
         SQLALCHEMY_DATABASE_URI=f"sqlite:///{Path(app.instance_path) / 'automail.db'}",
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        SECRET_KEY=os.getenv("FLASK_SECRET_KEY", "automail-dev-secret-key"),
     )
     if test_config:
         app.config.update(test_config)
@@ -85,6 +87,66 @@ def create_app(test_config=None):
     @app.get("/jobs/<int:job_id>")
     def index(job_id=None):
         return render_template("app/index.html")
+
+    @app.get("/api/gmail/connect")
+    def connect_gmail():
+        try:
+            state = mail_sender.generate_oauth_state()
+            session["gmail_oauth_state"] = state
+            redirect_url = mail_sender.build_authorization_url(state=state)
+        except mail_sender.GmailConfigError as error:
+            return jsonify(success=False, error=str(error)), 500
+        return redirect(redirect_url)
+
+    @app.get("/api/gmail/callback")
+    def gmail_callback():
+        code = request.args.get("code")
+        state = request.args.get("state")
+        error = request.args.get("error")
+
+        if error:
+            return redirect("/?gmail=error")
+
+        if not code or not state:
+            return jsonify(success=False, error="Google OAuth callback did not include the required fields."), 400
+
+        expected_state = session.pop("gmail_oauth_state", None)
+        if expected_state and state != expected_state:
+            return jsonify(success=False, error="OAuth state mismatch detected."), 400
+
+        try:
+            token_data = mail_sender.exchange_code_for_tokens(code)
+            sender = mail_sender.get_sender_identity_from_tokens(token_data)
+        except mail_sender.GmailOAuthError as error:
+            return jsonify(success=False, error=str(error)), 400
+        except mail_sender.GmailConfigError as error:
+            return jsonify(success=False, error=str(error)), 500
+
+        session["gmail_sender"] = sender
+        return redirect("/?gmail=connected")
+
+    @app.get("/api/gmail/session")
+    def gmail_session():
+        sender = session.get("gmail_sender")
+        if not sender:
+            return jsonify(success=True, authenticated=False, sender=None)
+
+        return jsonify(
+            success=True,
+            authenticated=True,
+            sender={
+                "email": sender.get("email"),
+                "display_name": sender.get("display_name"),
+                "picture_url": sender.get("picture_url"),
+                "status": sender.get("status", "connected"),
+            },
+        )
+
+    @app.post("/api/gmail/logout")
+    def gmail_logout():
+        session.pop("gmail_sender", None)
+        session.pop("gmail_oauth_state", None)
+        return jsonify(success=True, authenticated=False, sender=None)
 
     @app.post("/api/jobs")
     def create_job():
@@ -257,6 +319,9 @@ def create_app(test_config=None):
         if job.status != JobStatus.EMAIL_RENDERED:
             return jsonify(success=False, error=f"Job must be in EMAIL_RENDERED state to approve email. Current state: {job.status}"), 400
 
+        if not session.get("gmail_sender"):
+            return jsonify(success=False, error="A Gmail sender must be authenticated before Stage 05 can approve the email."), 403
+
         job.status = JobStatus.EMAIL_APPROVED
         db.session.commit()
         return jsonify(
@@ -265,6 +330,71 @@ def create_app(test_config=None):
             status=job.status,
         )
 
+    @app.post("/api/jobs/<int:job_id>/test-send")
+    def send_test_email(job_id):
+        job = db.session.get(EmailJob, job_id)
+        if job is None:
+            return jsonify(success=False, error="Email job not found."), 404
+
+        if not session.get("gmail_sender"):
+            return jsonify(success=False, error="A Gmail sender must be authenticated before Stage 06 test send."), 403
+
+        if job.status != JobStatus.EMAIL_APPROVED:
+            return jsonify(success=False, error=f"Job must be in EMAIL_APPROVED state to run the Stage 06 test send. Current state: {job.status}"), 400
+
+        if not job.email_html:
+            return jsonify(success=False, error="Final approved email HTML is missing."), 400
+
+        recipients = mail_sender.get_test_recipient_emails()
+        if not recipients:
+            return jsonify(success=False, error="No Stage 06 executive test recipients are configured."), 400
+
+        try:
+            message = mail_sender.build_message_for_job(
+                sender_identity=session["gmail_sender"],
+                job=job,
+                recipients=recipients,
+            )
+            result = mail_sender.send_mime_message(session["gmail_sender"], message)
+        except mail_sender.GmailSenderError as error:
+            return jsonify(success=False, error=str(error)), 502
+
+        job.status = JobStatus.TEST_SENT
+        db.session.commit()
+        return jsonify(success=True, job_id=job.id, status=job.status, send=result)
+
+    @app.post("/api/jobs/<int:job_id>/final-send")
+    def send_final_email(job_id):
+        job = db.session.get(EmailJob, job_id)
+        if job is None:
+            return jsonify(success=False, error="Email job not found."), 404
+
+        if not session.get("gmail_sender"):
+            return jsonify(success=False, error="A Gmail sender must be authenticated before Stage 07 final send."), 403
+
+        if job.status != JobStatus.TEST_APPROVED:
+            return jsonify(success=False, error=f"Job must be in TEST_APPROVED state to send the final email. Current state: {job.status}"), 400
+
+        if not job.email_html:
+            return jsonify(success=False, error="Final approved email HTML is missing."), 400
+
+        recipients = mail_sender.get_final_recipient_emails()
+        if not recipients:
+            return jsonify(success=False, error="No final recipient list is configured."), 400
+
+        try:
+            message = mail_sender.build_message_for_job(
+                sender_identity=session["gmail_sender"],
+                job=job,
+                recipients=recipients,
+            )
+            result = mail_sender.send_mime_message(session["gmail_sender"], message)
+        except mail_sender.GmailSenderError as error:
+            return jsonify(success=False, error=str(error)), 502
+
+        job.status = JobStatus.FINAL_SENT
+        db.session.commit()
+        return jsonify(success=True, job_id=job.id, status=job.status, send=result)
 
     @app.put("/api/jobs/<int:job_id>/email/content")
     def update_job_email_content(job_id):

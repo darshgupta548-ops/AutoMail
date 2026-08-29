@@ -29,6 +29,26 @@
       </nav>
     </header>
 
+    <div class="gmail-account-panel" id="gmail-account-panel">
+      <div class="gmail-account-header">
+        <span class="section-tag">// SENDER</span>
+        <button class="btn-mission btn-mission-secondary btn-sm" id="gmail-connect-btn" type="button">CONNECT GMAIL</button>
+        <button class="btn-mission btn-mission-danger btn-sm hidden" id="gmail-logout-btn" type="button">LOGOUT</button>
+      </div>
+
+      <div class="gmail-account-body" id="gmail-account-body">
+        <div class="gmail-status-empty" id="gmail-status-empty">No Gmail sender is connected yet.</div>
+        <div class="gmail-status-connected hidden" id="gmail-status-connected">
+          <img id="gmail-profile-image" alt="Google account profile" class="gmail-profile-image" />
+          <div class="gmail-account-meta">
+            <div class="gmail-account-name" id="gmail-account-name">Google Account</div>
+            <div class="gmail-account-email" id="gmail-account-email">not connected</div>
+            <div class="gmail-account-state" id="gmail-account-state">Connected</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- MISSION PROGRESS STEPPER -->
     <div class="mission-stepper-wrapper" id="stepper-container">
       <div class="mission-stepper">

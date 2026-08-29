@@ -40,6 +40,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const telemetryJobName = document.getElementById('telemetry-job-name');
   const pastJobsGrid = document.getElementById('past-jobs-grid');
 
+  const gmailConnectBtn = document.getElementById('gmail-connect-btn');
+  const gmailLogoutBtn = document.getElementById('gmail-logout-btn');
+  const gmailStatusEmpty = document.getElementById('gmail-status-empty');
+  const gmailStatusConnected = document.getElementById('gmail-status-connected');
+  const gmailProfileImage = document.getElementById('gmail-profile-image');
+  const gmailAccountName = document.getElementById('gmail-account-name');
+  const gmailAccountEmail = document.getElementById('gmail-account-email');
+  const gmailAccountState = document.getElementById('gmail-account-state');
+
   // Modals & Toasts
   const telemetryModal = document.getElementById('telemetry-modal');
   const telemetryStatusMsg = document.getElementById('telemetry-status-msg');
@@ -258,6 +267,51 @@ document.addEventListener('DOMContentLoaded', () => {
       body: JSON.stringify({ url: posterUrl })
     });
     return await res.json();
+  }
+
+  async function apiFetchGmailSession() {
+    try {
+      const res = await fetch('/api/gmail/session');
+      return await res.json();
+    } catch (err) {
+      return { success: false, authenticated: false, sender: null, error: 'Unable to load sender state.' };
+    }
+  }
+
+  async function apiLogoutGmail() {
+    const res = await fetch('/api/gmail/logout', { method: 'POST' });
+    return await res.json();
+  }
+
+  function renderGmailSenderState(sender) {
+    const connected = !!sender && sender.email;
+
+    gmailStatusEmpty.classList.toggle('hidden', connected);
+    gmailStatusConnected.classList.toggle('hidden', !connected);
+    gmailConnectBtn.classList.toggle('hidden', connected);
+    gmailLogoutBtn.classList.toggle('hidden', !connected);
+
+    if (!connected) {
+      gmailAccountName.textContent = 'Google Account';
+      gmailAccountEmail.textContent = 'not connected';
+      gmailAccountState.textContent = 'Disconnected';
+      gmailProfileImage.src = '';
+      gmailProfileImage.alt = 'No account connected';
+      return;
+    }
+
+    gmailProfileImage.src = sender.picture_url || 'https://lh3.googleusercontent.com/a/default-user';
+    gmailProfileImage.alt = `${sender.display_name || sender.email} profile`;
+    gmailAccountName.textContent = sender.display_name || 'Google Account';
+    gmailAccountEmail.textContent = sender.email;
+    gmailAccountState.textContent = sender.status === 'connected' ? 'Connected' : 'Authenticated';
+  }
+
+  async function refreshGmailSenderState() {
+    const data = await apiFetchGmailSession();
+    if (data.success) {
+      renderGmailSenderState(data.sender);
+    }
   }
 
   // =========================================================================
@@ -1048,6 +1102,21 @@ document.addEventListener('DOMContentLoaded', () => {
     switchView('dashboard', 1);
   });
 
+  gmailConnectBtn.addEventListener('click', () => {
+    window.location.href = '/api/gmail/connect';
+  });
+
+  gmailLogoutBtn.addEventListener('click', async () => {
+    const result = await apiLogoutGmail();
+    if (result.success) {
+      showToast('Gmail sender disconnected.');
+      renderGmailSenderState(null);
+    } else {
+      showToast('Unable to log out of Gmail.');
+    }
+  });
+
   // INITIAL BOOTSTRAP
+  refreshGmailSenderState();
   apiFetchJobs();
 });
