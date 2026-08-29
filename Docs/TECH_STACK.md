@@ -13,7 +13,8 @@
 | AI / Sense Maker | Gemini API | Understand poster/message/details and generate structured email context |
 | Image Hosting | Cloudinary | Host posters/logos and provide HTTPS asset URLs |
 | Email Maker | HTML + CSS + Jinja | Generate email-safe responsive HTML from approved context |
-| Email Delivery | Resend API | Deliver the generated HTML as an actual email |
+| MIME Builder | Python email module | Construct RFC 2822 messages with MIME/multipart structure |
+| Email Transport | Gmail API | Deliver formatted messages through Brahmand Gmail account |
 | Documentation | Markdown | Specification, architecture, workflow, decisions, README |
 | Version Control | Git + GitHub | Source control and project history |
 | Testing | Python test framework + real inbox testing | Automated checks plus real email-client verification |
@@ -67,7 +68,8 @@ Responsibilities include:
 - passing structured data to the Email Maker;
 - rendering application pages;
 - returning previews;
-- calling Resend for delivery.
+- calling MIME Builder to format messages;
+- calling Gmail API for delivery (future).
 
 Flask keeps the external services behind application-specific modules rather than exposing provider-specific logic throughout the frontend.
 

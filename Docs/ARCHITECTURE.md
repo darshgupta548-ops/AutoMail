@@ -19,17 +19,25 @@ Sense Maker ◄────────────────┘
    ▼
 Email Maker
    │
-   │ Human Review
+   │ Human Review (STAGE 05)
    ▼
-Mail Sender
+MIME Builder
    │
-   │ Test Email
+   │ Test Transmission (STAGE 06)
    ▼
-Mail Tester (Human)
+Gmail Sender
+   │ (future implementation)
    │
-   │ Approved
+   ▼
+Executive Reviewers
+   (President, VP, Me)
+   │
+   │ External Approval
    ▼
 IT Admin
+   │
+   ▼
+Final Transmission
    │
    ▼
 Students
@@ -55,7 +63,13 @@ Flask Application
    ├── Preview
    │     ├── Desktop
    │     └── Mobile
-   └── Mail Sender ───────► Resend API
+   ├── MIME Builder ────────► RFC 2822 Message
+   │     ├── Header Construction
+   │     ├── Multipart Assembly
+   │     ├── Base64url Encoding
+   │     └── Security Validation
+   └── Mail Sender ───────► Gmail API
+       (future implementation)
 ```
 
 ## 4. Module Responsibilities
@@ -86,8 +100,49 @@ Maintain controlled Light and Dark email themes. The selected theme is a design 
 ### 4.8 Preview
 Render the same generated email for desktop and mobile review.
 
-### 4.9 Mail Sender
-Submit the approved HTML, subject, recipient, and sender information to Resend. AUTO-MAIL does not manually implement MIME construction when the delivery provider accepts HTML directly.
+### 4.9 Email Approval (STAGE 05)
+Human verifies the final rendered email, including visual hierarchy, mobile presentation, and asset usage. The approved HTML becomes the source of truth for transmission.
+
+### 4.10 MIME Builder
+Construct a standards-compliant MIME/RFC 2822 email message from the final approved HTML, subject, and recipient information.
+
+**Responsibilities:**
+- Convert approved HTML body to MIME format
+- Generate plain-text alternative from HTML
+- Set proper headers (From, To, Cc, BCC, Subject)
+- Handle UTF-8 encoding
+- Prevent header injection
+- Produce RFC 2822 compliant message
+- Enable base64url encoding for Gmail API
+
+**NOT responsible for:**
+- Sending email
+- OAuth or authentication
+- Recipient list management
+- Email provider integration
+- UI logic
+- Email regeneration or editing
+
+### 4.11 Gmail Sender (Future)
+Submit the MIME message through Gmail API to the Brahmand Gmail account and deliver to intended recipients.
+
+### 4.12 Test Send (STAGE 06)
+Send the formatted message to exactly three executive reviewers:
+1. President
+2. Vice President
+3. Me (Administrator)
+
+Executives inspect the actual received email to verify:
+- Correct rendering in their email clients
+- Proper formatting across devices
+- Asset loading
+- Link functionality
+- Visual hierarchy
+
+External confirmation (chat, video call, in-person) constitutes approval.
+
+### 4.13 Final Send
+After executive approval via external communication, IT Admin authorizes final transmission to the intended recipient list.
 
 ## 5. Data Contracts
 
@@ -107,8 +162,22 @@ Human Review
 Email Maker
    ↓ RenderedEmail
 
-Mail Sender
-   ↓ DeliveryResult
+Human Review (STAGE 05)
+   ↓ ApprovedRenderedEmail
+
+MIME Builder
+   ↓ MIMEMessage / RFC 2822
+
+Gmail Sender
+   ↓ MessageSent
+
+Test Send (STAGE 06)
+   ↓ ExecutiveReview
+
+IT Admin Authorization
+   ↓ FinalTransmission
+
+Students
 ```
 
 ## 6. Workflow State
@@ -148,6 +217,7 @@ AutoMail/
 │   ├── asset_service.py
 │   ├── sense_maker.py
 │   ├── email_maker.py
+│   ├── mime_builder.py
 │   └── mail_sender.py
 ├── models/
 │   └── email_context.py
@@ -175,4 +245,43 @@ Sense Maker receives persisted EmailJob facts and the optional hosted poster, ca
 
 ```text
 EmailJob → Sense Maker → Gemini → Structured email_context → Human Review → Email Maker
+```
+
+## MIME Builder Input and Output
+
+The MIME Builder consumes the final approved rendered HTML from Stage 05.
+
+```text
+ApprovedRenderedEmail
+    ↓
+MIME Builder
+    ├── Validate headers (prevent injection)
+    ├── Set From, To, Cc, BCC, Subject headers
+    ├── Create multipart/alternative message
+    ├── Attach plain-text alternative
+    ├── Attach HTML with UTF-8 encoding
+    ├── Convert to RFC 2822
+    └── Optionally encode to base64url for Gmail API
+    ↓
+RFC 2822 Message
+```
+
+## Stage 06 — Executive Test Send
+
+After Stage 05 approval, the formatted email is sent via Gmail API to three executive reviewers for real-inbox testing.
+
+```text
+STAGE 06
+    ↓
+Send to: President, VP, Administrator
+    ↓
+Real email client inspection
+    ↓
+External approval (chat/call/face-to-face)
+    ↓
+FINAL SEND
+    ↓
+IT Admin authorizes final transmission
+    ↓
+Send to final recipient list
 ```
