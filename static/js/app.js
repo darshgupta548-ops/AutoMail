@@ -368,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <div class="space-panel" style="padding: 18px; border: 1px solid var(--border-subtle); margin-bottom: 20px;">
           <span class="section-tag" style="display: inline-block; margin-bottom: 10px;">EMAIL PREVIEW</span>
-          <div class="iframe-wrapper desktop-mode" data-fit-content style="height: 500px; border: 1px solid var(--border-subtle); background: #fff;">
+          <div class="iframe-wrapper desktop-mode stage-6-preview" style="height: 500px; border: 1px solid var(--border-subtle); background: #fff;">
             <iframe sandbox="allow-same-origin" title="Stage 06 email preview" srcdoc="${previewHtml.replace(/"/g, '&quot;')}"></iframe>
           </div>
         </div>
@@ -444,7 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
               ${sanitizeHtmlList(finalRecipients.length ? finalRecipients : ['No final recipient configured'])}
             </ul>
           </div>
-          <div class="iframe-wrapper desktop-mode" data-fit-content style="height: 420px; border: 1px solid var(--border-subtle); background: #fff;">
+          <div class="iframe-wrapper desktop-mode stage-6-preview" style="height: 420px; border: 1px solid var(--border-subtle); background: #fff;">
             <iframe sandbox="allow-same-origin" title="Final email preview" srcdoc="${previewHtml.replace(/"/g, '&quot;')}"></iframe>
           </div>
         </div>
@@ -1244,34 +1244,12 @@ document.addEventListener('DOMContentLoaded', () => {
       : `BACKGROUND <span class="t-none">— NOT USED</span>`;
   }
 
-  function fitPreviewIframeToContent(iframe, wrapper) {
-    if (!iframe || !wrapper || !wrapper.classList.contains('desktop-mode')) return;
-
-    const previewDocument = iframe.contentDocument;
-    if (!previewDocument) return;
-
-    const documentHeight = Math.max(
-      previewDocument.documentElement ? previewDocument.documentElement.scrollHeight : 0,
-      previewDocument.body ? previewDocument.body.scrollHeight : 0
-    );
-    wrapper.style.height = `${Math.max(documentHeight, 480)}px`;
-  }
-
-  const fitEmailPreviewToContent = () => fitPreviewIframeToContent(emailPreviewIframe, emailIframeWrapper);
-  emailPreviewIframe.addEventListener('load', fitEmailPreviewToContent);
-  pipelineStageContent.addEventListener('load', (event) => {
-    const iframe = event.target;
-    if (!(iframe instanceof HTMLIFrameElement) || !iframe.closest('[data-fit-content]')) return;
-    fitPreviewIframeToContent(iframe, iframe.closest('[data-fit-content]'));
-  }, true);
-
   // Viewport Controls
   btnViewportDesktop.addEventListener('click', () => {
     btnViewportDesktop.classList.add('active');
     btnViewportMobile.classList.remove('active');
     emailIframeWrapper.classList.add('desktop-mode');
     emailIframeWrapper.classList.remove('mobile-mode');
-    fitEmailPreviewToContent();
   });
 
   btnViewportMobile.addEventListener('click', () => {
@@ -1279,7 +1257,6 @@ document.addEventListener('DOMContentLoaded', () => {
     btnViewportDesktop.classList.remove('active');
     emailIframeWrapper.classList.add('mobile-mode');
     emailIframeWrapper.classList.remove('desktop-mode');
-    emailIframeWrapper.style.height = '';
   });
 
   // Regenerate Email Action
