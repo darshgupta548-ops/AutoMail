@@ -287,12 +287,6 @@ def get_test_recipient_emails():
     return _split_recipient_list(configured)
 
 
-def get_final_recipient_emails():
-    """Return the configured recipients for the Stage 07 final transmission."""
-    configured = os.getenv("FINAL_SEND_RECIPIENTS", "")
-    return _split_recipient_list(configured)
-
-
 def _split_recipient_list(raw_value):
     if not raw_value:
         return []

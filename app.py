@@ -335,11 +335,6 @@ def create_app(test_config=None):
         recipients = mail_sender.get_test_recipient_emails()
         return jsonify(success=True, recipients=recipients)
 
-    @app.get("/api/transmission/final-recipients")
-    def get_stage_07_recipients():
-        recipients = mail_sender.get_final_recipient_emails()
-        return jsonify(success=True, recipients=recipients)
-
     @app.post("/api/jobs/<int:job_id>/test-send")
     def send_test_email(job_id):
         job = db.session.get(EmailJob, job_id)
@@ -398,19 +393,30 @@ def create_app(test_config=None):
         if not job.email_html:
             return jsonify(success=False, error="Final approved email HTML is missing."), 400
 
-        recipients = mail_sender.get_final_recipient_emails()
-        if not recipients:
-            return jsonify(success=False, error="No final recipient list is configured."), 400
+        # Get custom recipient from request body
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify(success=False, error="Request body must be a JSON object."), 400
+
+        recipient = payload.get("recipient")
+        if not recipient:
+            return jsonify(success=False, error="Recipient email is required."), 400
+
+        # Validate recipient using mail_sender's validation
+        try:
+            clean_recipient = mail_sender._validate_recipient_email(recipient)
+        except mail_sender.GmailSenderError as error:
+            return jsonify(success=False, error=str(error)), 400
 
         try:
-            result = mail_sender.send_batch_to_recipients(session["gmail_sender"], job, recipients)
+            result = mail_sender.send_batch_to_recipients(session["gmail_sender"], job, [clean_recipient])
         except mail_sender.GmailSenderError as error:
             return jsonify(success=False, error=str(error)), 502
 
         if result["success"]:
             job.status = JobStatus.FINAL_SENT
             db.session.commit()
-        return jsonify(success=result["success"], job_id=job.id, status=job.status, send=result, recipients=recipients)
+        return jsonify(success=result["success"], job_id=job.id, status=job.status, send=result, recipients=[clean_recipient])
 
     @app.put("/api/jobs/<int:job_id>/email/content")
     def update_job_email_content(job_id):

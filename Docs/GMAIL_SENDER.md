@@ -76,18 +76,23 @@ Stage 06 sends the final approved HTML to the configured executive test recipien
 
 Recipients are configured via environment variables and are not hardcoded in source code.
 
-Configuration examples:
-
-- TEST_SEND_RECIPIENTS
-- FINAL_SEND_RECIPIENTS
+Configuration example:
+- TEST_SEND_RECIPIENTS (comma-separated list of executive test recipients)
 
 The same authenticated Gmail sender is reused for Stage 06 and Stage 07.
 
 ## Stage 07: Final Send
 
-Stage 07 remains the final authorized transmission. It is distinct from the executive test send and uses the same Gmail sender identity but the configured final recipient list.
+Stage 07 is the final authorized transmission. It is distinct from the executive test send and uses a custom recipient email address entered by the user in the frontend UI.
 
-The final IT Admin stage remains the authorization checkpoint for real transmission. It does not alter the sender identity.
+The user provides the final recipient email address directly in Stage 07, which is validated server-side before transmission. The same authenticated Gmail sender identity is used for sending.
+
+Recipient validation:
+- Required field
+- Must be a syntactically valid email address
+- Rejects malformed addresses
+- Rejects newline/header-injection characters
+- Server-side validation (frontend validation is supplementary)
 
 ## MIME Builder Integration
 
@@ -118,7 +123,6 @@ GOOGLE_CLIENT_SECRET=...
 GOOGLE_REDIRECT_URI=http://localhost:5000/api/gmail/callback
 GOOGLE_OAUTH_SCOPES=openid email profile https://www.googleapis.com/auth/gmail.send
 TEST_SEND_RECIPIENTS=president@example.com,vice-president@example.com,administrator@example.com
-FINAL_SEND_RECIPIENTS=it-admin@example.com
 FLASK_SECRET_KEY=local-dev-secret
 ```
 

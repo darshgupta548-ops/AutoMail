@@ -15,7 +15,6 @@ def app(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
     monkeypatch.setenv("GOOGLE_REDIRECT_URI", "https://example.com/oauth/callback")
     monkeypatch.setenv("TEST_SEND_RECIPIENTS", "president@example.com, vp@example.com, admin@example.com")
-    monkeypatch.setenv("FINAL_SEND_RECIPIENTS", "it-admin@example.com")
 
     app = create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:"})
     yield app
@@ -151,7 +150,7 @@ def test_stage_06_test_send_requires_auth_and_configured_recipients(client, app,
     assert "No Stage 06" in response.get_json()["error"]
 
 
-def test_stage_07_final_send_requires_auth_and_configured_recipients(client, app, job_data, monkeypatch):
+def test_stage_07_final_send_requires_auth_and_custom_recipient(client, app, job_data, monkeypatch):
     job_id = _create_rendered_job(client, job_data)
     with app.app_context():
         from models.email_job import EmailJob
@@ -162,10 +161,64 @@ def test_stage_07_final_send_requires_auth_and_configured_recipients(client, app
     with client.session_transaction() as session:
         session["gmail_sender"] = {"email": "brahmand@gmail.com", "token": {"access_token": "abc"}}
 
-    monkeypatch.setattr(mail_sender, "get_final_recipient_emails", lambda: [])
-    response = client.post(f"/api/jobs/{job_id}/final-send")
+    # Test missing recipient
+    response = client.post(f"/api/jobs/{job_id}/final-send", json={})
     assert response.status_code == 400
-    assert "No final recipient" in response.get_json()["error"]
+    assert "Recipient email is required" in response.get_json()["error"]
+
+    # Test invalid recipient
+    response = client.post(f"/api/jobs/{job_id}/final-send", json={"recipient": "invalid-email"})
+    assert response.status_code == 400
+    assert "Invalid recipient email" in response.get_json()["error"]
+
+
+def test_stage_07_accepts_valid_custom_recipient(client, app, job_data, monkeypatch):
+    job_id = _create_rendered_job(client, job_data)
+    with app.app_context():
+        from models.email_job import EmailJob
+        job = db.session.get(EmailJob, job_id)
+        job.status = "TEST_APPROVED"
+        db.session.commit()
+
+    with client.session_transaction() as session:
+        session["gmail_sender"] = {"email": "brahmand@gmail.com", "token": {"access_token": "abc"}}
+
+    captured = {}
+
+    def fake_send_batch(sender_identity, job_instance, recipients):
+        captured["recipients"] = list(recipients)
+        captured["sender"] = sender_identity["email"]
+        return {"success": True, "sent_count": len(recipients), "results": [], "status": "sent"}
+
+    monkeypatch.setattr(mail_sender, "send_batch_to_recipients", fake_send_batch)
+
+    response = client.post(f"/api/jobs/{job_id}/final-send", json={"recipient": "custom@example.com"})
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+    assert captured["recipients"] == ["custom@example.com"]
+    assert captured["sender"] == "brahmand@gmail.com"
+
+
+def test_stage_07_rejects_header_injection_attempt(client, app, job_data):
+    job_id = _create_rendered_job(client, job_data)
+    with app.app_context():
+        from models.email_job import EmailJob
+        job = db.session.get(EmailJob, job_id)
+        job.status = "TEST_APPROVED"
+        db.session.commit()
+
+    with client.session_transaction() as session:
+        session["gmail_sender"] = {"email": "brahmand@gmail.com", "token": {"access_token": "abc"}}
+
+    # Test newline injection
+    response = client.post(f"/api/jobs/{job_id}/final-send", json={"recipient": "victim@example.com\nBcc: attacker@example.com"})
+    assert response.status_code == 400
+    assert "invalid header characters" in response.get_json()["error"].lower()
+
+    # Test carriage return injection
+    response = client.post(f"/api/jobs/{job_id}/final-send", json={"recipient": "victim@example.com\rBcc: attacker@example.com"})
+    assert response.status_code == 400
+    assert "invalid header characters" in response.get_json()["error"].lower()
 
 
 def test_stage_06_uses_only_test_recipients(client, app, job_data, monkeypatch):

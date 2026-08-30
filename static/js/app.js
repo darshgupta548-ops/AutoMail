@@ -427,22 +427,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (job.status === 'TEST_APPROVED') {
-      const finalRecipientsResponse = await fetch('/api/transmission/final-recipients');
-      const finalRecipientsData = finalRecipientsResponse.ok ? await finalRecipientsResponse.json() : { recipients: [] };
-      const finalRecipients = finalRecipientsData.recipients || [];
-
       pipelineStageContent.innerHTML = `
         <div class="status-panel" style="padding: 26px; border: 1px solid rgba(90, 160, 255, 0.35); border-radius: var(--radius-md); background: rgba(8, 20, 31, 0.7);">
           <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">// FINAL SEND READY</span>
           <h2 class="panel-title" style="margin: 0 0 12px; font-size: 30px;">FINAL TRANSMISSION PREPARED</h2>
           <p style="color: var(--text-muted); margin-bottom: 18px; line-height: 1.6;">
-            The executive test send succeeded. The approved email is ready for the configured final delivery recipient.
+            The executive test send succeeded. The approved email is ready for final delivery to a custom recipient.
           </p>
           <div class="space-panel" style="padding: 18px; border: 1px solid var(--border-subtle); margin-bottom: 16px;">
             <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">FINAL RECIPIENT</span>
-            <ul style="margin: 0; padding-left: 18px; color: var(--text-bright); line-height: 1.8;">
-              ${sanitizeHtmlList(finalRecipients.length ? finalRecipients : ['No final recipient configured'])}
-            </ul>
+            <div style="margin-top: 12px;">
+              <label for="final-recipient-email" style="display: block; color: var(--text-bright); margin-bottom: 8px; font-size: 14px;">Recipient Email Address</label>
+              <input 
+                type="email" 
+                id="final-recipient-email" 
+                placeholder="recipient@example.com" 
+                style="width: 100%; padding: 12px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); color: var(--text-bright); font-size: 14px; box-sizing: border-box;"
+                required
+              >
+              <p id="recipient-error" style="color: var(--status-error); font-size: 13px; margin-top: 8px; display: none;"></p>
+            </div>
           </div>
           <div class="iframe-wrapper desktop-mode stage-6-preview" style="height: 420px; border: 1px solid var(--border-subtle); background: #fff;">
             <iframe sandbox="allow-same-origin" title="Final email preview" srcdoc="${previewHtml.replace(/"/g, '&quot;')}"></iframe>
@@ -456,14 +460,45 @@ document.addEventListener('DOMContentLoaded', () => {
       `);
 
       document.getElementById('btn-trigger-final-send').addEventListener('click', async () => {
-        const res = await fetch(`/api/jobs/${job.id}/final-send`, { method: 'POST' });
+        const recipientInput = document.getElementById('final-recipient-email');
+        const recipient = recipientInput.value.trim();
+        const errorEl = document.getElementById('recipient-error');
+        
+        // Frontend validation
+        if (!recipient) {
+          errorEl.textContent = 'Recipient email is required.';
+          errorEl.style.display = 'block';
+          return;
+        }
+        
+        const emailRegex = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
+        if (!emailRegex.test(recipient)) {
+          errorEl.textContent = 'Please enter a valid email address.';
+          errorEl.style.display = 'block';
+          return;
+        }
+        
+        if (recipient.includes('\n') || recipient.includes('\r')) {
+          errorEl.textContent = 'Email address contains invalid characters.';
+          errorEl.style.display = 'block';
+          return;
+        }
+        
+        errorEl.style.display = 'none';
+        
+        const res = await fetch(`/api/jobs/${job.id}/final-send`, { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipient })
+        });
         const data = await res.json();
         if (data.success) {
           state.activeJob.status = data.status;
           showToast('Final email transmission sent successfully.');
           await renderPipelineStage(state.activeJob);
         } else {
-          showToast(data.error || 'Final send failed.');
+          errorEl.textContent = data.error || 'Final send failed.';
+          errorEl.style.display = 'block';
         }
       });
 

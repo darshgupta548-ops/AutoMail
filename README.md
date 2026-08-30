@@ -114,9 +114,12 @@ GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
 GOOGLE_REDIRECT_URI=https://your-domain.example.com/api/gmail/callback
 GOOGLE_OAUTH_SCOPES=openid email profile https://www.googleapis.com/auth/gmail.send
 TEST_SEND_RECIPIENTS=president@example.com,vice-president@example.com,administrator@example.com
-FINAL_SEND_RECIPIENTS=it-admin@example.com
 FLASK_SECRET_KEY=change-this-for-local-dev
 ```
+
+**Email Transmission Configuration:**
+- **Stage 06 (Test Send):** Uses `TEST_SEND_RECIPIENTS` from `.env` for executive test recipients
+- **Stage 07 (Final Send):** Uses a custom recipient email address entered by the user in the frontend UI
 
 Do not commit real client secrets or tokens. Use `.env` locally and keep OAuth credential material out of source control.
 
