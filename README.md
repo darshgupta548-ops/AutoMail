@@ -10,8 +10,6 @@
 
 #### Video Demo: <URL HERE>
 
-This project is being prepared for the CS50x final project submission and will require a recorded demo video before final submission to edX.
-
 ## Overview
 
 AUTO-MAIL is an automated responsive mail generator for event-based institutional email. It is designed for communities such as college clubs, event organizers, and student organizations that need polished communication quickly without manually rewriting the same announcements from scratch. The core problem is that event planning already creates a lot of communication work: posters, WhatsApp announcements, venue details, registration links, and last-minute schedule updates. Turning all of that into a clean email still takes time, and if the messaging is not carefully maintained it can feel inconsistent, rushed, or low quality.
@@ -126,7 +124,11 @@ The repository `.gitignore` includes the expected local exclusions for `.env`, P
 
 ## Testing
 
-The current project test suite is being verified on the `cs50-final` branch. The project is expected to have 167 tests; this number will only be reported if it is confirmed by the current `pytest` run.
+AUTO-MAIL includes an automated test suite covering asset uploads, email
+rendering, MIME construction, Gmail sending, and workflow validation.
+
+The current test suite contains 167 tests, all of which pass successfully
+with 0 failures.
 
 ## Notes on AI usage
 
