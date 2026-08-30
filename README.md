@@ -1,110 +1,113 @@
 # AUTO-MAIL
 
-Automated Responsive Mail Generator for event-based institutional email.
+## Project Information
 
-## Architecture Overview
+- Project title: AUTO-MAIL
+- Student name: Darsh
+- GitHub username: darshgupta548-ops
+- edX username: Darsh-Gupta
+- City, Country: Ahmedabad, India
 
-AUTO-MAIL implements a multi-stage workflow for generating and delivering event emails:
+#### Video Demo: <https://youtu.be/A-ye6PSn-hE>
 
-```
-Stage 01 — Input & Assets
-    ↓
-Stage 02 — AI Context Generation (Sense Maker)
-    ↓
-Stage 03 — Context Review & Approval
-    ↓
-Stage 04 — Email Rendering (Email Maker)
-    ↓
-Stage 05 — Email Verification & Approval
-    ↓
-Stage 06 — Test Send (Executive Review)
-    ↓
-Stage 07 — Final Transmission (IT Admin)
-    ↓
-Recipients
-```
+## Overview
 
-## Key Modules
+AUTO-MAIL is an automation tool for creating and sending HTML-based email messages. Traditional plain-text emails are functional but often lack the visual structure and branding needed for announcements, events, and institutional communication. Creating a polished HTML email manually, however, can be surprisingly time-consuming. Even drag-and-drop email builders require users to repeatedly arrange sections, format text, position images, adapt layouts for mobile devices, and make sure the final design renders correctly.
 
-### 1. Sense Maker (`services/sense_maker.py`)
-Calls Gemini AI to generate structured email context from:
-- Event poster (image)
-- Event message/description
-- Manual event details
+AUTO-MAIL was built to automate that process. Instead of manually designing an email every time, the user provides the information and visual assets needed for the message, and AUTO-MAIL generates the structured content and responsive HTML email through a guided workflow. The application uses Gemini to transform the supplied information into structured email content, while Jinja templates handle the deterministic generation of the final HTML. This means the AI is responsible for understanding and organizing the content, while the application remains responsible for how that content is actually presented.
 
-### 2. Email Maker (`services/email_maker.py`)
-Renders final responsive HTML email from approved context using:
-- Jinja templates
-- Responsive CSS
-- Light/Dark themes
-- Organization logos
-- Event-specific assets
+The project also goes beyond simply generating HTML. An HTML email is not just a webpage that can be sent as-is; it has to be packaged correctly for email clients. AUTO-MAIL therefore includes a dedicated MIME builder that constructs a multipart email containing both an HTML version and a plain-text alternative. It handles the required MIME structure, encoding, headers, and validation before the message is sent through the Gmail API. This makes the project an end-to-end system for generating, validating, packaging, reviewing, and transmitting HTML email messages rather than simply an email template generator.
 
-### 3. MIME Builder (`services/mime_builder.py`)
-Constructs standards-compliant RFC 2822 email messages from approved HTML:
-- Multipart/alternative structure
-- Auto-generated plain-text alternative
-- UTF-8 encoding
-- Header injection prevention
-- Base64url encoding for Gmail API
+The workflow is intentionally designed around automation with human control. The user supplies the initial information and assets, AUTO-MAIL generates the email content and layout, and the user reviews the result before anything is transmitted. The process moves through seven stages: input and assets, AI context generation, context review, HTML rendering, email verification, controlled test sending, and final sending to a custom recipient. This separation allows the repetitive parts of email creation to be automated while keeping the final communication under human control.
 
-### 4. Gmail Auth + Sender (`services/mail_sender.py`)
-Authenticates and manages the active Gmail identity used for transmission:
-- Google OAuth for the Brahmand Gmail account
-- backend-owned sender identity and session state
-- profile image, display name, and email surfaced to the frontend
-- logout and credential expiry handling
-- provider-specific Gmail sending through the authenticated account
+The motivation for AUTO-MAIL comes from a practical problem faced by organizations such as college clubs and student teams. When an event needs to be announced, the information may already exist in a poster, message, or event brief, but turning that information into a professional HTML email can still require significant manual effort. AUTO-MAIL reduces that work by automating the transition from event information to a complete, responsive, email-ready message, including the otherwise overlooked technical step of constructing the MIME message required for actual email delivery.
 
-## Documentation
+## Seven-Stage Workflow
 
-- [ARCHITECTURE.md](Docs/ARCHITECTURE.md) — System design and module responsibilities
-- [TECH_STACK.md](Docs/TECH_STACK.md) — Technology choices and rationale
-- [DECISIONS.md](Docs/DECISIONS.md) — Architecture decisions and trade-offs
-- [MIME_BUILDER.md](Docs/MIME_BUILDER.md) — MIME Builder module documentation
-- [GMAIL_SENDER.md](Docs/GMAIL_SENDER.md) — Gmail OAuth, sender identity, and transport architecture
-- [SPEC.md](Docs/SPEC.md) — Requirements and acceptance criteria
+The application follows a strict seven-stage process:
 
-## Testing
+1. Stage 01: Event input and asset upload
+2. Stage 02: AI-generated email context from the supplied event data and poster
+3. Stage 03: Context review and editing approval
+4. Stage 04: Email generation and HTML rendering
+5. Stage 05: Email verification and approval
+6. Stage 06: Test send to designated review recipients
+7. Stage 07: Final send to the user-entered custom recipient
 
-Run the full test suite:
+This staged design matters because email communication is a high-trust action. A person can review the generated copy before it is sent, and each stage acts as a checkpoint. The product is therefore closer to a structured communication assistant than a black-box email sender.
+
+The role of AI is central but intentionally bounded. Gemini is used at runtime in the Sense Maker layer to convert event information into a structured email context: subject, preheader, headline, intro, content sections, event details, CTA, and closing statement. The AI does not directly output the final HTML email; instead, it produces structured content that is validated, reviewed, and then rendered deterministically through Jinja templates. That separation keeps the project grounded in CS50 concepts of validation, schema design, and controlled data flow rather than allowing unstructured model output to be injected directly into final emails.
+
+Human approval remains essential. Before any email is sent, the generated context and final HTML are reviewed by a user. Stage 06 and Stage 07 are intentionally distinct: Stage 06 uses a controlled set of test recipients defined in the environment for executive review, while Stage 07 requires a final recipient email entered by the user in the frontend. This protects the workflow from accidental broad sending and keeps the final step explicit and intentional.
+
+## Design Choices
+
+### Flask
+Flask is used because the project needs a lightweight web framework that can manage routes, templates, session state, and a small API surface without unnecessary infrastructure. For a CS50-style project, Flask provides the right level of complexity: we can build a web app and maintain state in a straightforward way while still learning key concepts around server endpoints, validation, and request/response handling.
+
+### SQLite and SQLAlchemy
+SQLite was chosen because the project is local, lightweight, and easy to reason about for a final project. It allows AutoMail to persist job state, event data, and generated email content without introducing a separate database service. SQLAlchemy makes that persistence clean: the project uses model classes for `EmailJob` and `EmailContext`, maintaining the seven-stage workflow in a structured way instead of keeping everything in ephemeral browser state.
+
+### JavaScript SPA/front-end
+The front-end is implemented as a JavaScript-driven single-page workflow because the user experience is a multi-step process with staged transitions, form state, previews, and approval actions. A plain static HTML interface would become cumbersome. The JavaScript layer handles navigation, updates, and rendering state while still relying on the backend for actual business logic and persistence.
+
+### Jinja templates
+Jinja is used for the final HTML email rendering because it provides structured, deterministic templating while keeping content modular and maintainable. The project does not want raw AI output to become the final email markup; instead, Jinja assembles approved content and event-specific data into a consistent style and layout. This keeps the output predictable and easier for testing.
+
+### Gemini
+Gemini is a runtime feature of AutoMail: it analyzes the event poster, description, and other fields to generate a JSON email context that matches an explicit schema. This is useful because it reduces the time needed to turn rough event information into polished copy while still requiring human review. The important tradeoff is that Gemini is used as an assistant to the workflow, not as an uncontested source of truth.
+
+### Cloudinary
+Cloudinary is used for poster and background asset uploads because event communication depends on images and branding. The service supports secure URLs, image hosting, and easy asset reuse without storing large files in the Flask app itself. This keeps the app focused on email generation logic instead of local asset storage management.
+
+### Gmail OAuth and Gmail API
+Gmail OAuth is used so the application can authenticate as a real Gmail sender without storing user-provided credentials in the browser. The Gmail API then sends the final message through that authenticated identity. This is important for real-world functionality: the application can send through a legitimate Gmail account while still enforcing server-side control over the sender and token handling.
+
+### Separate MIME builder
+The MIME builder exists because raw HTML alone is not enough for email transport. It validates headers, builds a standards-compliant multipart/alternative message, auto-generates a plain-text alternative, and guards against header injection. This is a key CS50-style systems decision: the project separates business logic from transport details, which makes it easier to reason about correctness and test edge cases.
+
+### Seven-stage workflow
+The seven stages reflect the reality that event email creation is an approval-heavy process. They provide a workflow model that is easy to reason about, easier to test, and more reliable in practice. This also allows the project to demonstrate state management and system design without abandoning usability.
+
+### Human approval before sending
+Human approval is built into the product because email is a public-facing communication channel. The user reviews the generated context and the final HTML before test or final transmission. This reduces the chance of incorrect content, wrong links, or inappropriate tone going out to real recipients.
+
+### Separate Stage 06 and Stage 07 sending
+Stage 06 and Stage 07 are intentionally separated to support safe validation before high-consequence delivery. Stage 06 tests the message against real email delivery while keeping the recipients controlled, while Stage 07 requires a final recipient chosen by the user. This distinction addresses the practical issue that sending a final email should be explicit and deliberate rather than casually routed through the same process as a test.
+
+### Server-side recipient validation
+Server-side validation prevents malformed recipients, injection attempts, or accidental sending errors. The builder checks email addresses and rejects invalid patterns before the message is created. This is both a good engineering practice and a clear example of security-driven design in a web app.
+
+## Files
+
+The project is organized around a few core modules:
+
+- `app.py` — Flask application factory, routes, and the primary application entry point.
+- `extensions.py` — Shared SQLAlchemy database instance used across the app.
+- `models/email_job.py` — SQLAlchemy model for the email workflow state and job data.
+- `models/email_context.py` — Pydantic model that defines the structure returned by Gemini for email content.
+- `services/asset_service.py` — Cloudinary upload and validation logic for event posters and backgrounds.
+- `services/sense_maker.py` — Gemini-backed email context generator and request validation layer.
+- `services/email_maker.py` — Jinja-based rendering of the approved context into final responsive HTML.
+- `services/mime_builder.py` — Standards-compliant MIME message creation and header validation.
+- `services/mail_sender.py` — Gmail OAuth, sender identity management, and email transmission through the Gmail API.
+- `static/js/app.js` — Client-side workflow logic, state transitions, approval flows, and API calls.
+- `static/css/style.css` — Styling for the mission-control interface and review screens.
+- `templates/app/index.html` — Main UI shell for the seven-stage AutoMail workflow.
+- `templates/app/context_review.html` — Context review page for editing AI-generated email content.
+- `templates/app/email_review.html` — Final email preview and approval page.
+- `templates/emails/base.html` — Final responsive HTML email template used for actual campaign delivery.
+- `tests/` — Automated validation suite covering uploads, email rendering, MIME building, Gmail sending, and workflow validation.
+
+The test files in this folder include the project’s automated checks for assets, email generation, MIME output, the Gmail sender wrapper, and validation logic.
+
+## Documentation and Setup
+
+Additional project documentation is stored in the `Docs/` directory and covers the architecture, stack decisions, decisions log, MIME builder, Gmail sender, and specification details.
+
+A local `.env` file should define the project configuration, including Gemini, Cloudinary, Gmail OAuth, and the stage-06 test recipient list. Example keys include:
 
 ```bash
-pip install -r requirements.txt
-pytest tests/ -v
-```
-
-Current test coverage:
-- 110+ baseline tests (assets, email rendering, validation)
-- 43 MIME builder tests (message construction, security, encoding)
-- **Total: 153 tests**
-
-## Deployment Roadmap
-
-### ✓ Completed
-- [x] Sense Maker (AI context generation)
-- [x] Email Maker (HTML rendering)
-- [x] Asset management (Cloudinary)
-- [x] Stage 05 verification
-- [x] MIME Builder (message construction)
-
-### ✅ Implemented
-- [x] Gmail OAuth integration
-- [x] Gmail sender identity/session management
-- [x] Stage 06 transport gating and Gmail delivery wrapper
-- [x] Stage 07 final send flow enforcement
-
-### 📋 Future
-- [ ] Inbox read / Gmail management features
-- [ ] Delivery reporting and analytics
-- [ ] Multi-language support
-- [ ] Attachment support
-
-## Environment Setup
-
-Create a `.env` file with:
-
-```
 GOOGLE_API_KEY=your_gemini_api_key
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
@@ -113,106 +116,33 @@ GOOGLE_CLIENT_ID=your_google_oauth_client_id
 GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
 GOOGLE_REDIRECT_URI=https://your-domain.example.com/api/gmail/callback
 GOOGLE_OAUTH_SCOPES=openid email profile https://www.googleapis.com/auth/gmail.send
-TEST_SEND_RECIPIENTS=president@example.com,vice-president@example.com,administrator@example.com
+TEST_SEND_RECIPIENTS=review1@example.com,review2@example.com
 FLASK_SECRET_KEY=change-this-for-local-dev
 ```
 
-**Email Transmission Configuration:**
-- **Stage 06 (Test Send):** Uses `TEST_SEND_RECIPIENTS` from `.env` for executive test recipients
-- **Stage 07 (Final Send):** Uses a custom recipient email address entered by the user in the frontend UI
+- Stage 06 uses `TEST_SEND_RECIPIENTS` for controlled reviewer delivery.
+- Stage 07 requires a custom recipient email entered by the user at runtime.
+- Gmail API transmission is implemented and used in the production workflow, not just planned for the future.
 
-Do not commit real client secrets or tokens. Use `.env` locally and keep OAuth credential material out of source control.
+The repository `.gitignore` includes the expected local exclusions for `.env`, Python caches, SQLite databases, `.venv`, and editor artifacts.
 
-## Running the Application
+## Testing
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+AUTO-MAIL includes an automated test suite covering asset uploads, email
+rendering, MIME construction, Gmail sending, and workflow validation.
 
-# Run tests
-pytest tests/ -v
+The current test suite contains 167 tests, all of which pass successfully
+with 0 failures.
 
-# Start Flask development server
-python -m flask run --app app
-```
+## Notes on AI usage
 
-## Project Structure
+Gemini is an intentional runtime feature of AUTO-MAIL used for email context generation and structured analysis of input data. That use is part of the application itself. Any AI coding assistance used during development is disclosed separately in the code comment at the top of `app.py` and is not presented as though the core implementation was built without AI support.
 
-```
-AutoMail/
-├── app.py                  # Flask application
-├── requirements.txt        # Python dependencies
-├── Docs/                   # Documentation
-│   ├── ARCHITECTURE.md
-│   ├── TECH_STACK.md
-│   ├── DECISIONS.md
-│   ├── MIME_BUILDER.md
-│   └── SPEC.md
-├── services/               # Business logic modules
-│   ├── asset_service.py    # Cloudinary integration
-│   ├── sense_maker.py      # Gemini AI context generation
-│   ├── email_maker.py      # Jinja template rendering
-│   ├── mime_builder.py     # RFC 2822 message construction
-│   └── mail_sender.py      # Gmail API (future)
-├── models/                 # SQLAlchemy models
-│   ├── email_job.py        # Workflow state machine
-│   └── email_context.py    # Structured email data
-├── templates/              # Jinja templates
-│   ├── app/                # Application UI
-│   └── emails/             # Email templates
-├── tests/                  # Test suite
-│   ├── test_asset_uploads.py
-│   ├── test_email_maker.py
-│   ├── test_mime_builder.py
-│   ├── test_sense_maker.py
-│   └── test_validation.py
-└── static/                 # CSS, JS, images
-```
+## References
 
-## Architecture Highlights
-
-### Stage-Based Workflow
-Each stage is a discrete approval checkpoint. Changes to earlier stages invalidate later stages.
-
-### Deterministic Email Rendering
-Email HTML is generated from controlled templates, not arbitrary AI-generated markup.
-
-### Real-Inbox Testing (Stage 06)
-Before final transmission, test email is sent to executive stakeholders for verification in actual email clients.
-
-### MIME Format
-Final message follows RFC 2822 standard with multipart/alternative structure (HTML + plain-text).
-
-### Security
-- Header injection prevention in MIME Builder
-- No embedded credentials
-- HTTPS-only asset URLs
-- OAuth for Gmail authentication (future)
-
-## Current Backend Gmail Flow
-
-1. **Google OAuth**
-   - `/api/gmail/connect` starts the server-side OAuth flow.
-   - `/api/gmail/callback` validates the state and exchanges the authorization code.
-   - The authenticated sender identity is stored in the Flask session, not in the frontend.
-
-2. **Sender Identity**
-   - The backend resolves the authenticated account profile and caches:
-     - email address
-     - display name
-     - profile image URL
-     - OAuth token state
-
-3. **Stage 06 / Stage 07**
-   - The same authenticated Gmail account is used for both test send and final send.
-   - No editable From field is exposed to the frontend.
-   - The system blocks transmission when no Gmail sender is connected.
-
-4. **MIME Builder integration**
-   - `mail_sender.build_message_for_job()` prepares the final RFC 2822 MIME message.
-   - The Gmail sender uses the MIME output as the transport payload.
-
-## Support
-
-For questions about the architecture or implementation, see the Docs/ directory for detailed documentation.
-
+- `Docs/ARCHITECTURE.md`
+- `Docs/TECH_STACK.md`
+- `Docs/DECISIONS.md`
+- `Docs/MIME_BUILDER.md`
+- `Docs/GMAIL_SENDER.md`
+- `Docs/SPEC.md`
