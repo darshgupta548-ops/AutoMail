@@ -5,8 +5,8 @@
 - Project title: AUTO-MAIL
 - Student name: Darsh
 - GitHub username: darshgupta548-ops
-- edX username: TBD
-- City, Country: TBD
+- edX username: Darsh-Gupta
+- City, Country: Ahmedabad, India
 
 #### Video Demo: <URL HERE>
 
