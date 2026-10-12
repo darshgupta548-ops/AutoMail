@@ -351,3 +351,8 @@ msg = build_mime_message(
 - [RFC 4648: Base64 Data Encodings](https://tools.ietf.org/html/rfc4648)
 - [Gmail API: Send Messages](https://developers.google.com/gmail/api/reference/rest/v1/users.messages/send)
 - [Python email module](https://docs.python.org/3/library/email.html)
+
+
+## AUTO-MAIL V2 CC behavior
+
+Stage 07 supplies a single To address plus optional validated CC addresses. The MIME builder writes `To` and `Cc` headers, rejects malformed values, control characters, and case-insensitive duplicates across To and CC. Gmail API receives the complete raw MIME message; the sender also derives and validates the To/Cc delivery list from that message. Stage 06 does not pass CC and continues to send only to the configured reviewer list.

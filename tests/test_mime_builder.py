@@ -652,3 +652,18 @@ class TestComplexScenarios:
         assert msg is not None
         b64url = message_to_base64url(msg)
         assert b64url is not None
+
+
+def test_reject_duplicate_to_and_cc_addresses_case_insensitively():
+    with pytest.raises(MIMEBuilderValidationError, match="Duplicate"):
+        build_mime_message("sender@example.com", ["person@example.com"], "Test", "<p>Hi</p>", cc=["PERSON@example.com"])
+
+
+def test_empty_cc_does_not_add_cc_header():
+    msg = build_mime_message("sender@example.com", ["to@example.com"], "Test", "<p>Hi</p>", cc=[])
+    assert msg.get("Cc") is None
+
+
+def test_mime_rejects_control_characters_at_address_boundaries():
+    with pytest.raises(MIMEBuilderValidationError, match="control chars"):
+        build_mime_message("sender@example.com", ["\nto@example.com"], "Test", "<p>Hi</p>")

@@ -1,5 +1,6 @@
 """Persistence model for an AUTO-MAIL email-generation workflow."""
 
+import hashlib
 from datetime import UTC, datetime
 
 from extensions import db
@@ -49,9 +50,23 @@ class EmailJob(db.Model):
     event_palette = db.Column(db.JSON, nullable=True)
     event_typography = db.Column(db.JSON, nullable=True)
     email_html = db.Column(db.Text, nullable=True)
+    email_approved_hash = db.Column(db.String(64), nullable=True)
+    test_sent_hash = db.Column(db.String(64), nullable=True)
+    final_recipient = db.Column(db.String(320), nullable=True)
+    final_cc = db.Column(db.JSON, nullable=False, default=list)
     status = db.Column(db.String(30), nullable=False, default=JobStatus.DRAFT)
     created_at = db.Column(db.DateTime, nullable=False, default=_utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    @property
+    def test_sent_version_current(self):
+        """Whether the stored HTML matches the most recently test-sent version."""
+        return bool(
+            self.test_sent_hash
+            and self.email_html
+            and self.test_sent_hash
+            == hashlib.sha256(self.email_html.encode("utf-8")).hexdigest()
+        )
 
     def to_dict(self):
         """Return a JSON-ready representation of this job."""
@@ -71,6 +86,10 @@ class EmailJob(db.Model):
             "event_palette": self.event_palette,
             "event_typography": self.event_typography,
             "email_html": self.email_html,
+            "has_prior_test_transmission": self.test_sent_hash is not None,
+            "test_sent_version_current": self.test_sent_version_current,
+            "final_recipient": self.final_recipient,
+            "final_cc": self.final_cc or [],
             "status": self.status,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),

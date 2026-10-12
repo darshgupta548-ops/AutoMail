@@ -335,7 +335,7 @@ def test_legacy_job_receives_organization_logo_urls(client, job_payload):
     
     # Verify new responsive logo sizing
     assert 'max-width:120px' in html, "Desktop logos should use 120px max-width"
-    assert 'width:33.33%' in html, "Mobile logos should use percentage-based sizing (33.33%)"
+    assert 'width:25%' in html, "Four mobile logos should use equal percentage-based sizing"
     assert 'logo-cell' in html, "Logo cells should have logo-cell class for mobile responsiveness"
     assert 'font-size:28px' in html, "Mobile headline should be 28px"
     assert 'max-width:88px' not in html, "Old 88px mobile cap should be removed"
@@ -1133,3 +1133,23 @@ def test_both_assets_used_status_and_html_agreement(client, app, job_payload):
     job_data = client.get(f"/api/jobs/{job_id}").get_json()["job"]
     assert job_data["event_poster"] == poster_url
     assert job_data["email_bg"] == background_url
+
+
+def test_existing_sqlite_database_gets_additive_recipient_columns(tmp_path):
+    import sqlite3
+    database_path = tmp_path / "legacy.db"
+    connection = sqlite3.connect(database_path)
+    connection.execute("CREATE TABLE email_jobs (id INTEGER PRIMARY KEY, event_name VARCHAR(200))")
+    connection.execute("INSERT INTO email_jobs (event_name) VALUES ('Existing campaign')")
+    connection.commit()
+    connection.close()
+
+    upgraded = create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": f"sqlite:///{database_path}"})
+    with upgraded.app_context():
+        columns = {column["name"] for column in db.inspect(db.engine).get_columns("email_jobs")}
+        row = db.session.execute(db.text("SELECT event_name, final_recipient, final_cc FROM email_jobs WHERE id=1")).one()
+        assert {"final_recipient", "final_cc", "email_approved_hash", "test_sent_hash"}.issubset(columns)
+        assert row.event_name == "Existing campaign"
+        assert row.final_recipient is None
+        assert row.final_cc == "[]"
+        db.session.remove()

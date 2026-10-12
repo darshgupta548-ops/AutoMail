@@ -21,6 +21,10 @@ def _validate_email_address(email_addr, field_name):
     if not isinstance(email_addr, str):
         raise MIMEBuilderValidationError(f"{field_name} must be a string.")
     
+    if any(ord(char) < 32 or ord(char) == 127 for char in email_addr):
+        raise MIMEBuilderValidationError(
+            f"{field_name} contains invalid characters (control chars not allowed)."
+        )
     email_addr = email_addr.strip()
     
     if not email_addr:
@@ -128,6 +132,13 @@ def build_mime_message(sender, recipients, subject, html_body, text_body=None, c
         
         cc = _validate_email_list(cc, "cc")
         bcc = _validate_email_list(bcc, "bcc")
+        normalized = [address.casefold() for address in recipients]
+        if cc and any(address.casefold() in normalized for address in cc):
+            raise MIMEBuilderValidationError("Duplicate recipient found across To and CC.")
+        if cc:
+            combined = normalized + [address.casefold() for address in cc]
+            if len(combined) != len(set(combined)):
+                raise MIMEBuilderValidationError("Duplicate CC recipient found.")
         
         # Generate plain-text alternative if not provided
         if not text_body:

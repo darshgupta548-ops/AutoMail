@@ -416,7 +416,7 @@ def test_only_supplied_header_logos_render_in_fixed_order():
         "Brahmand": "https://example.com/brahmand.png",
     }}
     html = render_email(context)
-    assert html.index("brahmand.png") < html.index("st.png")
+    assert html.index("st.png") < html.index("brahmand.png")
     assert "SAIIL" not in html
 
 
@@ -431,21 +431,28 @@ def test_all_supplied_organization_logos_render_before_headline():
     html = render_email({**COMPLETE_CONTEXT, **ORGANIZATION_LOGOS})
     for url in ORGANIZATION_LOGOS.values():
         assert url in html
-    assert html.index(ORGANIZATION_LOGOS["brahmand_logo_url"]) < html.index('<h1 class="email-headline"')
-    assert html.index(ORGANIZATION_LOGOS["osail_logo_url"]) < html.index(ORGANIZATION_LOGOS["snt_logo_url"])
+    expected = [
+        ORGANIZATION_LOGOS["snt_logo_url"],
+        "https://res.cloudinary.com/vmt4lznh/image/upload/v1791796132/tess.png",
+        ORGANIZATION_LOGOS["brahmand_logo_url"],
+        ORGANIZATION_LOGOS["osail_logo_url"],
+    ]
+    assert [html.index(url) for url in expected] == sorted(html.index(url) for url in expected)
+    assert html.index(expected[-1]) < html.index('<h1 class="email-headline"')
     assert 'alt="Brahmand"' in html
-    assert 'alt="OSAIl"' in html
-    assert 'alt="S&amp;T"' in html
+    assert 'alt="OSAIL"' in html
+    assert 'alt="SnT"' in html
+    assert 'alt="Tesseract"' in html
 
 
-def test_missing_organization_logo_is_omitted_without_broken_image_markup():
+def test_missing_context_logo_uses_verified_default_without_broken_image_markup():
     context = {**COMPLETE_CONTEXT, **ORGANIZATION_LOGOS, "snt_logo_url": None}
     html = render_email(context)
-    assert ORGANIZATION_LOGOS["snt_logo_url"] not in html
+    assert ORGANIZATION_LOGOS["snt_logo_url"] in html
     assert ORGANIZATION_LOGOS["brahmand_logo_url"] in html
     assert ORGANIZATION_LOGOS["osail_logo_url"] in html
     assert 'src=""' not in html
-    assert 'alt="S&T"' not in html
+    assert 'alt="SnT"' in html
 
 
 def test_responsive_logo_markup_exists_without_scaling():
@@ -453,7 +460,7 @@ def test_responsive_logo_markup_exists_without_scaling():
     assert 'class="org-logo"' in html
     assert '.org-logo{width:100%!important;max-width:90px!important;height:auto!important}' in html
     assert 'transform:scale' not in html
-    assert 'width:33.33%' in html, "Mobile logos should use 33.33% for equal distribution"
+    assert 'width:25%' in html, "Four logos should use equal-width cells"
     assert 'font-size:28px' in html, "Mobile headline should be 28px"
     assert 'img{max-width:100%!important' in html, "Mobile should have img max-width rule for responsiveness"
 
@@ -498,8 +505,8 @@ def test_no_fixed_width_elements_cause_mobile_overflow():
     assert 'td.mobile-padding{padding:20px 16px!important}' in html, "Mobile padding should be overridden to 20px 16px"
     
     # Verify logo cells use 33.33% for equal distribution
-    assert 'width:33.33%' in html, "Logo cells should use 33.33% for equal distribution"
-    assert '.logo-cell{width:33.33%!important}' in html, "Mobile logo cells should use 33.33%"
+    assert 'width:25%' in html, "Logo cells should use 25% for equal distribution"
+    assert '.logo-cell{width:25%!important}' in html, "Mobile logo cells should use 25%"
 
 
 def test_subcom_email_requirements():
@@ -514,7 +521,9 @@ def test_subcom_email_requirements():
     assert html.count('<img') >= 3, "Should have at least 3 images"
     assert 'Brahmand_Logo_-_Black_PNG.png' in html, "Should have Brahmand logo"
     assert 'Osail_black_logo.png' in html, "Should have OSAIL logo"
-    assert 'sntlogo.png' in html, "Should have S&T logo"
+    assert 'sntlogo.png' in html, "Should have SnT logo"
+    assert 'v1791796132/tess.png' in html, "Should have Tesseract logo"
+    assert html.count('class="org-logo"') == 4
     
     # No horizontal overflow-causing fixed widths
     assert 'width="600"' not in html or 'width="100%"' in html, "Should not have fixed 600px width causing overflow"

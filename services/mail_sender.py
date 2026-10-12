@@ -13,7 +13,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-from services.mime_builder import build_mime_message
+from services.mime_builder import build_mime_message, message_recipients_list
 
 
 DEFAULT_GMAIL_SCOPES = [
@@ -226,10 +226,14 @@ def send_mime_message(sender_identity, mime_message):
     service = build("gmail", "v1", credentials=creds)
 
     try:
+        delivery_recipients = message_recipients_list(mime_message)
+        if not delivery_recipients:
+            raise GmailSenderError("No delivery recipients are present in the MIME message.")
         raw_payload = base64.urlsafe_b64encode(mime_message.as_bytes()).decode("ascii").rstrip("=")
         response = service.users().messages().send(userId="me", body={"raw": raw_payload}).execute()
         return {
             "success": True,
+            "recipients": delivery_recipients,
             "message_id": response.get("id"),
             "thread_id": response.get("threadId"),
             "status": "sent",
@@ -239,15 +243,46 @@ def send_mime_message(sender_identity, mime_message):
 
 
 def _validate_recipient_email(value):
-    candidate = str(value or "").strip()
+    if not isinstance(value, str):
+        raise GmailSenderError("Recipient email must be a string.")
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise GmailSenderError("Recipient email contains invalid header characters.")
+    candidate = value.strip()
     if not candidate:
         raise GmailSenderError("Recipient email is required.")
-    if "\n" in candidate or "\r" in candidate:
-        raise GmailSenderError("Recipient email contains invalid header characters.")
     if not re.fullmatch(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$", candidate):
         raise GmailSenderError(f"Invalid recipient email address: {candidate}")
     return candidate
 
+
+
+def validate_cc_recipients(to_recipient, cc_values):
+    """Validate CC input and reject duplicates against To, case-insensitively."""
+    if not isinstance(cc_values, list):
+        raise GmailSenderError("CC must be a list of email addresses.")
+    to_address = _validate_recipient_email(to_recipient)
+    seen = {to_address.casefold()}
+    clean = []
+    for value in cc_values:
+        if not isinstance(value, str):
+            raise GmailSenderError("Each CC recipient must be an email address string.")
+        address = _validate_recipient_email(value)
+        key = address.casefold()
+        if key in seen:
+            raise GmailSenderError("Duplicate recipient found across To and CC.")
+        seen.add(key)
+        clean.append(address)
+    return clean
+
+
+def send_final_to_recipients(sender_identity, job, recipient, cc=None):
+    """Send one Stage 07 message with visible To/Cc headers and all recipients."""
+    to_address = _validate_recipient_email(recipient)
+    clean_cc = validate_cc_recipients(to_address, cc or [])
+    message = build_message_for_job(sender_identity, job, [to_address], cc=clean_cc)
+    result = send_mime_message(sender_identity, message)
+    result["recipients"] = [to_address, *clean_cc]
+    return result
 
 def send_batch_to_recipients(sender_identity, job, recipients):
     """Send the approved email to the configured recipients and return per-recipient results."""

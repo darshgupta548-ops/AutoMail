@@ -51,5 +51,6 @@ class EmailContext(BaseModel):
     brahmand_logo_url: str | None = None
     snt_logo_url: str | None = None
     osail_logo_url: str | None = None
+    tesseract_logo_url: str | None = None
     # Legacy compatibility for contexts created before the named fields existed.
     logo_urls: dict[str, str] = Field(default_factory=dict)

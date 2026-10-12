@@ -5,6 +5,8 @@ import re
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from services.brand_assets import LOGO_CONFIGURATION, TESSERACT_LOGO_URL
+
 
 class EmailMakerError(Exception):
     """Raised when email rendering fails."""
@@ -12,11 +14,6 @@ class EmailMakerError(Exception):
 
 _CONTACT_LINE = re.compile(
     r"^\s*[^:\n]{1,80}:\s*(?:\+?[\d][\d\s().-]{5,}|\S+@\S+)\s*$"
-)
-_LOGO_FIELDS = (
-    ("Brahmand", "brahmand_logo_url"),
-    ("OSAIl", "osail_logo_url"),
-    ("S&T", "snt_logo_url"),
 )
 
 
@@ -73,11 +70,10 @@ def _prepare_context(email_context: dict) -> dict:
     context["sections"] = cleaned_sections
     context["contact_details"] = list(dict.fromkeys(contact for contact in contacts if contact))
     logo_urls = context.get("logo_urls") or {}
-    legacy_names = {"Brahmand": "Brahmand", "OSAIl": "SAIIL", "S&T": "S&T"}
+    context["tesseract_logo_url"] = context.get("tesseract_logo_url") or TESSERACT_LOGO_URL
     context["header_logos"] = [
-        {"name": name, "url": context.get(field_name) or logo_urls.get(legacy_names[name])}
-        for name, field_name in _LOGO_FIELDS
-        if context.get(field_name) or logo_urls.get(legacy_names[name])
+        {"name": name, "url": context.get(field_name) or logo_urls.get(legacy_key) or default_url}
+        for name, field_name, legacy_key, default_url in LOGO_CONFIGURATION
     ]
     return context
 

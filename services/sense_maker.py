@@ -13,11 +13,7 @@ from models.email_context import EmailContext
 
 GEMINI_MODEL = "gemini-3.6-flash"
 
-DEFAULT_ORGANIZATION_LOGOS = {
-    "brahmand_logo_url": "https://res.cloudinary.com/vmt4lznh/image/upload/v1787948490/Brahmand_Logo_-_Black_PNG.png",
-    "snt_logo_url": "https://res.cloudinary.com/vmt4lznh/image/upload/v1787948490/sntlogo.png",
-    "osail_logo_url": "https://res.cloudinary.com/vmt4lznh/image/upload/v1787948489/Osail_black_logo.png",
-}
+from services.brand_assets import DEFAULT_ORGANIZATION_LOGOS
 CLOUDINARY_HOST = "res.cloudinary.com"
 GEMINI_RESPONSE_SCHEMA = {
     "type": "object",

@@ -38,15 +38,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const telemetryPill = document.getElementById('telemetry-pill');
   const telemetryJobName = document.getElementById('telemetry-job-name');
-  const pastJobsGrid = document.getElementById('past-jobs-grid');
+  const activeJobsGrid = document.getElementById('active-jobs-grid');
+  const activeJobsSection = document.getElementById('active-jobs-section');
+  const completedJobsGrid = document.getElementById('completed-jobs-grid');
+  const completedJobsSection = document.getElementById('completed-jobs-section');
+  const activeJobsTab = document.getElementById('active-jobs-tab');
+  const completedJobsTab = document.getElementById('completed-jobs-tab');
+  const activeJobCount = document.getElementById('active-job-count');
+  const completedJobCount = document.getElementById('completed-job-count');
+  const missionLogError = document.getElementById('mission-log-error');
+  activeJobsTab.addEventListener('click', () => setMissionView('active'));
+  completedJobsTab.addEventListener('click', () => setMissionView('completed'));
   const pipelineStageContent = document.getElementById('pipeline-stage-content');
   const pipelineActions = document.getElementById('pipeline-actions');
+  const themeToggle = document.getElementById('theme-toggle');
 
   const gmailConnectBtn = document.getElementById('gmail-connect-btn');
   const gmailLogoutBtn = document.getElementById('gmail-logout-btn');
   const gmailStatusEmpty = document.getElementById('gmail-status-empty');
   const gmailStatusConnected = document.getElementById('gmail-status-connected');
   const gmailProfileImage = document.getElementById('gmail-profile-image');
+  const gmailAvatarFallback = document.getElementById('gmail-avatar-fallback');
   const gmailAccountName = document.getElementById('gmail-account-name');
   const gmailAccountEmail = document.getElementById('gmail-account-email');
   const gmailAccountState = document.getElementById('gmail-account-state');
@@ -103,6 +115,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // =========================================================================
   // TOAST NOTIFICATIONS & TELEMETRY LOADER
   // =========================================================================
+  function escapeAttribute(value) {
+    return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  }
+  const escapeHtml = escapeAttribute;
+
   function showToast(message, duration = 3500) {
     const toast = document.createElement('div');
     toast.className = 'toast-msg';
@@ -136,12 +153,45 @@ document.addEventListener('DOMContentLoaded', () => {
     Object.keys(views).forEach(key => {
       views[key].classList.toggle('active', key === viewName);
     });
+    const activeView = views[viewName];
+    if (activeView) {
+      activeView.classList.remove('is-entering');
+      void activeView.offsetWidth;
+      activeView.classList.add('is-entering');
+      activeView.addEventListener('animationend', () => activeView.classList.remove('is-entering'), { once: true });
+    }
 
     navLinks.dashboard.classList.toggle('active', viewName === 'dashboard');
     navLinks.create.classList.toggle('active', viewName === 'create');
+    navLinks.assets.classList.toggle('active', viewName === 'assets');
 
     updateStepper(stepNumber);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    window.scrollTo({ top: 0, behavior });
+  }
+
+  function setAppTheme(theme, persist = true) {
+    const selectedTheme = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = selectedTheme;
+    themeToggle.textContent = selectedTheme === 'dark' ? 'Light theme' : 'Dark theme';
+    themeToggle.setAttribute('aria-pressed', String(selectedTheme === 'dark'));
+    themeToggle.setAttribute('aria-label', `Switch to ${selectedTheme === 'dark' ? 'light' : 'dark'} theme`);
+    if (persist) {
+      try {
+        localStorage.setItem('automail-theme', selectedTheme);
+      } catch (error) {
+        showToast('Theme changed for this session, but could not be saved.');
+      }
+    }
+  }
+
+  try {
+    const savedTheme = localStorage.getItem('automail-theme');
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      setAppTheme(savedTheme, false);
+    }
+  } catch (error) {
+    setAppTheme('light', false);
   }
 
   function updateStepper(activeStep) {
@@ -152,6 +202,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const step = parseInt(item.getAttribute('data-step'), 10);
       item.classList.toggle('active', step === activeStep);
       item.classList.toggle('completed', step < activeStep);
+      if (step === activeStep) item.setAttribute('aria-current', 'step');
+      else item.removeAttribute('aria-current');
     });
 
     const progressPercentage = ((activeStep - 1) / 6) * 100;
@@ -175,11 +227,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/jobs');
       const data = await res.json();
       if (data.success) {
+        missionLogError.classList.add('hidden');
         renderJobsGrid(data.jobs);
       } else {
+        missionLogError.classList.remove('hidden');
         showToast(`Failed to load missions: ${data.error}`);
       }
     } catch (err) {
+      missionLogError.classList.remove('hidden');
       showToast('Network error loading mission telemetry.');
     }
   }
@@ -288,6 +343,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return await res.json();
   }
 
+  function getInitials(name, email) {
+    const source = name || email || 'GA';
+    const parts = source.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    const first = source.charAt(0) || 'G';
+    return first.toUpperCase();
+  }
+
+  function setGmailAvatarFallback(label) {
+    const initials = getInitials(label, gmailAccountEmail.textContent || 'GA');
+    gmailProfileImage.style.display = 'none';
+    gmailAvatarFallback.textContent = initials;
+    gmailAvatarFallback.style.display = 'flex';
+  }
+
   function renderGmailSenderState(sender) {
     const connected = !!sender && sender.email;
 
@@ -300,14 +372,25 @@ document.addEventListener('DOMContentLoaded', () => {
       gmailAccountName.textContent = 'Google Account';
       gmailAccountEmail.textContent = 'not connected';
       gmailAccountState.textContent = 'Disconnected';
-      gmailProfileImage.src = '';
+      gmailProfileImage.removeAttribute('src');
       gmailProfileImage.alt = 'No account connected';
+      gmailProfileImage.style.display = 'none';
+      gmailAvatarFallback.textContent = '?';
+      gmailAvatarFallback.style.display = 'flex';
       return;
     }
 
-    gmailProfileImage.src = sender.picture_url || 'https://lh3.googleusercontent.com/a/default-user';
-    gmailProfileImage.alt = `${sender.display_name || sender.email} profile`;
-    gmailAccountName.textContent = sender.display_name || 'Google Account';
+    const label = sender.display_name || sender.email || 'Google Account';
+    const pictureUrl = sender.picture_url && sender.picture_url.trim() ? sender.picture_url : '';
+
+    gmailProfileImage.style.display = 'block';
+    gmailProfileImage.onerror = () => setGmailAvatarFallback(label);
+    gmailProfileImage.alt = `${label} profile`;
+    gmailProfileImage.src = pictureUrl || 'https://lh3.googleusercontent.com/a/default-user';
+    gmailAvatarFallback.style.display = 'none';
+    gmailAvatarFallback.textContent = getInitials(label, sender.email);
+
+    gmailAccountName.textContent = label;
     gmailAccountEmail.textContent = sender.email;
     gmailAccountState.textContent = sender.status === 'connected' ? 'Connected' : 'Authenticated';
   }
@@ -334,6 +417,77 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderPipelineActions(buttonMarkup) {
     pipelineActions.innerHTML = buttonMarkup;
+  }
+
+  function bindReviewChoices() {
+    const showChoicesButton = document.getElementById('btn-review-make-changes');
+    const choices = document.getElementById('review-stage-choices');
+    if (!showChoicesButton || !choices) return;
+    showChoicesButton.addEventListener('click', () => {
+      choices.hidden = false;
+      choices.querySelector('button')?.focus();
+    });
+    choices.querySelectorAll('[data-reopen-stage]').forEach(button => {
+      button.addEventListener('click', () => reopenReview(Number(button.dataset.reopenStage)));
+    });
+  }
+
+  async function reopenReview(stage) {
+    if (!state.activeJob) return;
+    const button = document.querySelector(`[data-reopen-stage="${stage}"]`);
+    if (button) button.disabled = true;
+    try {
+      const response = await fetch(`/api/jobs/${state.activeJob.id}/reopen-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage })
+      });
+      const data = await response.json();
+      if (!data.success) {
+        showToast(data.error || 'Unable to reopen this review stage.');
+        return;
+      }
+
+      state.activeJob = {
+        ...state.activeJob,
+        status: data.status,
+        email_context: data.email_context,
+        email_html: data.email_html,
+        has_prior_test_transmission: data.previous_test_was_sent,
+        test_sent_version_current: data.test_sent_version_current
+      };
+      if (stage === 3) {
+        populateContextEditor(data.email_context);
+        switchView('contextReview', 3);
+        showToast('Context review reopened. Saving changes will render a new email version.');
+        return;
+      }
+
+      if (stage === 4) {
+        startTelemetryLoader(['RENDERING THE REVIEWED EMAIL...']);
+        const rendered = await apiGenerateEmail(state.activeJob.id);
+        stopTelemetryLoader();
+        if (!rendered.success) {
+          showToast(`Email rendering failed: ${rendered.error}`);
+          return;
+        }
+        state.activeJob.status = rendered.status;
+        state.activeJob.email_html = rendered.email_html;
+        state.activeJob.has_prior_test_transmission = rendered.has_prior_test_transmission;
+        state.activeJob.test_sent_version_current = rendered.test_sent_version_current;
+      }
+
+      populateEmailReview(state.activeJob);
+      switchView('emailReview', 5);
+      showToast(stage === 4
+        ? 'Email re-rendered. Review and approve this version before a fresh test transmission.'
+        : 'Email verification reopened. Approval and a fresh test transmission are required.');
+    } catch (error) {
+      stopTelemetryLoader();
+      showToast('Unable to reopen review because the server could not be reached.');
+    } finally {
+      if (button && document.body.contains(button)) button.disabled = false;
+    }
   }
 
   async function renderPipelineStage(job) {
@@ -391,7 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (job.status === 'TEST_SENT') {
       pipelineStageContent.innerHTML = `
-        <div class="status-panel success" style="padding: 26px; border: 1px solid rgba(79, 209, 197, 0.4); border-radius: var(--radius-md); background: rgba(12, 25, 35, 0.7);">
+        <div class="status-panel success">
           <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">// TEST TRANSMISSION COMPLETE</span>
           <h2 class="panel-title" style="margin: 0 0 12px; font-size: 30px;">TEST TRANSMISSION COMPLETE</h2>
           <p style="color: var(--text-muted); margin-bottom: 18px; line-height: 1.6;">
@@ -406,21 +560,36 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
 
       renderPipelineActions(`
-        <button type="button" class="btn-mission btn-mission-primary" id="btn-proceed-to-send">PROCEED TO SEND</button>
+        <button type="button" class="btn-mission btn-mission-secondary" id="btn-review-make-changes">REVIEW OR MAKE CHANGES</button>
+        <button type="button" class="btn-mission btn-mission-primary" id="btn-proceed-to-send">PROCEED TO FINAL SEND</button>
       `);
+      pipelineStageContent.insertAdjacentHTML('beforeend', `
+        <div class="review-stage-choices" id="review-stage-choices" hidden aria-label="Choose a review stage">
+          <p>Reopening review invalidates final readiness. The updated email must be approved and test-transmitted again.</p>
+          <button type="button" class="btn-mission btn-mission-secondary btn-sm" data-reopen-stage="3">Review context · Stage 03</button>
+          <button type="button" class="btn-mission btn-mission-secondary btn-sm" data-reopen-stage="4">Re-render email · Stage 04</button>
+          <button type="button" class="btn-mission btn-mission-secondary btn-sm" data-reopen-stage="5">Edit email · Stage 05</button>
+        </div>
+      `);
+      bindReviewChoices();
 
       document.getElementById('btn-proceed-to-send').addEventListener('click', async () => {
+        const proceedButton = document.getElementById('btn-proceed-to-send');
+        proceedButton.disabled = true;
         try {
           const res = await fetch(`/api/jobs/${job.id}/test/approve`, { method: 'POST' });
           const data = await res.json();
           if (!data.success) {
             showToast(data.error || 'Unable to advance to final send.');
+            proceedButton.disabled = false;
             return;
           }
           state.activeJob.status = data.status;
           await renderPipelineStage(state.activeJob);
-        } catch (err) {
-          showToast('Unable to advance to the final send stage.');
+          switchView('pipelinePreview', 7);
+        } catch (error) {
+          showToast('Unable to advance to final send because the server could not be reached.');
+          if (document.body.contains(proceedButton)) proceedButton.disabled = false;
         }
       });
       return;
@@ -428,7 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (job.status === 'TEST_APPROVED') {
       pipelineStageContent.innerHTML = `
-        <div class="status-panel" style="padding: 26px; border: 1px solid rgba(90, 160, 255, 0.35); border-radius: var(--radius-md); background: rgba(8, 20, 31, 0.7);">
+        <div class="status-panel final-ready">
           <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">// FINAL SEND READY</span>
           <h2 class="panel-title" style="margin: 0 0 12px; font-size: 30px;">FINAL TRANSMISSION PREPARED</h2>
           <p style="color: var(--text-muted); margin-bottom: 18px; line-height: 1.6;">
@@ -438,13 +607,14 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">FINAL RECIPIENT</span>
             <div style="margin-top: 12px;">
               <label for="final-recipient-email" style="display: block; color: var(--text-bright); margin-bottom: 8px; font-size: 14px;">Recipient Email Address</label>
-              <input 
-                type="email" 
-                id="final-recipient-email" 
-                placeholder="recipient@example.com" 
-                style="width: 100%; padding: 12px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); color: var(--text-bright); font-size: 14px; box-sizing: border-box;"
-                required
-              >
+              <input type="email" id="final-recipient-email" placeholder="recipient@example.com"
+                value="${escapeAttribute(job.final_recipient || '')}" class="space-input" required>
+              <label for="final-cc-emails" class="form-label" style="display:block;margin:16px 0 8px;">CC (OPTIONAL)</label>
+              <input type="text" id="final-cc-emails" placeholder="one@example.com, two@example.com"
+                value="${escapeAttribute((job.final_cc || []).join(', '))}" class="space-input" autocomplete="email">
+              <p class="recipient-disclosure">CC recipients are visible to the To recipient and to each other.</p>
+              <p id="recipient-save-status" class="recipient-save-status" role="status" aria-live="polite">Recipient choices save to this job as you review them.</p>
+              <div class="recipient-review" id="final-recipient-review" aria-live="polite"></div>
               <p id="recipient-error" style="color: var(--status-error); font-size: 13px; margin-top: 8px; display: none;"></p>
             </div>
           </div>
@@ -456,12 +626,74 @@ document.addEventListener('DOMContentLoaded', () => {
 
       renderPipelineActions(`
         <button type="button" class="btn-mission btn-mission-secondary" id="btn-pipeline-return">RETURN TO DASHBOARD</button>
+        <button type="button" class="btn-mission btn-mission-secondary" id="btn-review-make-changes">REVIEW OR MAKE CHANGES</button>
         <button type="button" class="btn-mission btn-mission-primary" id="btn-trigger-final-send">SEND FINAL EMAIL</button>
       `);
+      pipelineStageContent.insertAdjacentHTML('beforeend', `
+        <div class="review-stage-choices" id="review-stage-choices" hidden aria-label="Choose a review stage">
+          <p>Reopening review invalidates final readiness. The updated email must be approved and test-transmitted again.</p>
+          <button type="button" class="btn-mission btn-mission-secondary btn-sm" data-reopen-stage="3">Review context · Stage 03</button>
+          <button type="button" class="btn-mission btn-mission-secondary btn-sm" data-reopen-stage="4">Re-render email · Stage 04</button>
+          <button type="button" class="btn-mission btn-mission-secondary btn-sm" data-reopen-stage="5">Edit email · Stage 05</button>
+        </div>
+      `);
+      bindReviewChoices();
+
+      const recipientReview = document.getElementById('final-recipient-review');
+      const recipientSaveStatus = document.getElementById('recipient-save-status');
+      let recipientSaveTimer;
+      let recipientSaveRequest = Promise.resolve();
+      const currentRecipients = () => ({
+        recipient: document.getElementById('final-recipient-email').value.trim(),
+        cc: document.getElementById('final-cc-emails').value.split(/[;,\n]+/).map(value => value.trim()).filter(Boolean)
+      });
+      const saveFinalRecipients = async () => {
+        const choices = currentRecipients();
+        const validEmail = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
+        if (!validEmail.test(choices.recipient)) {
+          recipientSaveStatus.textContent = 'Enter a valid To address to save these choices.';
+          return false;
+        }
+        recipientSaveStatus.textContent = 'Saving recipient choices…';
+        recipientSaveRequest = recipientSaveRequest.then(async () => {
+          const response = await fetch(`/api/jobs/${job.id}/recipients`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(choices)
+          });
+          const result = await response.json();
+          if (!result.success) throw new Error(result.error || 'Unable to save recipient choices.');
+          state.activeJob.final_recipient = result.recipient;
+          state.activeJob.final_cc = result.cc;
+          recipientSaveStatus.textContent = 'Recipient choices saved to this job.';
+          return true;
+        }).catch(error => {
+          recipientSaveStatus.textContent = 'Recipient choices are not saved yet.';
+          const errorEl = document.getElementById('recipient-error');
+          errorEl.textContent = error.message;
+          errorEl.style.display = 'block';
+          return false;
+        });
+        return recipientSaveRequest;
+      };
+      const scheduleRecipientSave = () => {
+        clearTimeout(recipientSaveTimer);
+        recipientSaveTimer = setTimeout(saveFinalRecipients, 500);
+      };
+      const updateRecipientReview = () => {
+        const to = document.getElementById('final-recipient-email').value.trim();
+        const cc = document.getElementById('final-cc-emails').value.split(/[;,\n]+/).map(value => value.trim()).filter(Boolean);
+        recipientReview.innerHTML = `<strong>To</strong> ${escapeAttribute(to || 'Not set')}<br><strong>CC</strong> ${cc.length ? cc.map(escapeAttribute).join(', ') : 'None'}`;
+      };
+      document.getElementById('final-recipient-email').addEventListener('input', () => { updateRecipientReview(); scheduleRecipientSave(); });
+      document.getElementById('final-cc-emails').addEventListener('input', () => { updateRecipientReview(); scheduleRecipientSave(); });
+      document.getElementById('final-recipient-email').addEventListener('change', saveFinalRecipients);
+      document.getElementById('final-cc-emails').addEventListener('change', saveFinalRecipients);
+      updateRecipientReview();
 
       document.getElementById('btn-trigger-final-send').addEventListener('click', async () => {
         const recipientInput = document.getElementById('final-recipient-email');
         const recipient = recipientInput.value.trim();
+        const ccInput = document.getElementById('final-cc-emails');
+        const cc = ccInput.value.split(/[;,\n]+/).map(value => value.trim()).filter(Boolean);
         const errorEl = document.getElementById('recipient-error');
         
         // Frontend validation
@@ -486,23 +718,40 @@ document.addEventListener('DOMContentLoaded', () => {
         
         errorEl.style.display = 'none';
         
-        const res = await fetch(`/api/jobs/${job.id}/final-send`, { 
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recipient })
-        });
-        const data = await res.json();
-        if (data.success) {
-          state.activeJob.status = data.status;
-          showToast('Final email transmission sent successfully.');
-          await renderPipelineStage(state.activeJob);
-        } else {
-          errorEl.textContent = data.error || 'Final send failed.';
+        const sendButton = document.getElementById('btn-trigger-final-send');
+        sendButton.disabled = true;
+        sendButton.textContent = 'SENDING…';
+        try {
+          const res = await fetch(`/api/jobs/${job.id}/final-send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recipient, cc })
+          });
+          const data = await res.json();
+          if (data.success) {
+            state.activeJob.status = data.status;
+            state.activeJob.final_recipient = recipient;
+            state.activeJob.final_cc = cc;
+            showToast('Final email transmission sent successfully.');
+            await renderPipelineStage(state.activeJob);
+          } else {
+            errorEl.textContent = data.error || 'Final send failed.';
+            errorEl.style.display = 'block';
+          }
+        } catch (error) {
+          errorEl.textContent = 'A network error prevented final delivery. Your recipient choices are saved; retry when the connection is restored.';
           errorEl.style.display = 'block';
+        } finally {
+          if (document.body.contains(sendButton)) {
+            sendButton.disabled = false;
+            sendButton.textContent = 'SEND FINAL EMAIL';
+          }
         }
       });
 
-      document.getElementById('btn-pipeline-return').addEventListener('click', () => {
+      document.getElementById('btn-pipeline-return').addEventListener('click', async () => {
+        clearTimeout(recipientSaveTimer);
+        await saveFinalRecipients();
         apiFetchJobs();
         switchView('dashboard', 1);
       });
@@ -511,7 +760,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (job.status === 'FINAL_SENT') {
       pipelineStageContent.innerHTML = `
-        <div class="status-panel success" style="padding: 24px; border: 1px solid rgba(79, 209, 197, 0.4); border-radius: var(--radius-md); background: rgba(12, 25, 35, 0.7);">
+        <div class="status-panel success">
           <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">// FINAL MESSAGE DISPATCHED</span>
           <h2 class="panel-title" style="margin: 0 0 12px; font-size: 30px;">FINAL TRANSMISSION COMPLETE</h2>
           <p style="color: var(--text-muted);">The final approved email was sent successfully through the authenticated Gmail account.</p>
@@ -578,10 +827,10 @@ document.addEventListener('DOMContentLoaded', () => {
           submitButton.textContent = 'SEND TEST';
         }
         pipelineStageContent.innerHTML = `
-          <div class="status-panel error" style="padding: 26px; border: 1px solid rgba(255, 112, 112, 0.45); border-radius: var(--radius-md); background: rgba(28, 16, 16, 0.7);">
+          <div class="status-panel error">
             <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">// TEST TRANSMISSION FAILED</span>
             <h2 class="panel-title" style="margin: 0 0 12px; font-size: 30px;">TEST TRANSMISSION FAILED</h2>
-            <p style="color: var(--text-muted); margin-bottom: 12px;">${(data.error || 'The Gmail API rejected the test transmission.').replace(/\n/g, ' ')}</p>
+            <p style="color: var(--text-muted); margin-bottom: 12px;">${escapeHtml((data.error || 'The Gmail API rejected the test transmission.').replace(/\n/g, ' '))}</p>
           </div>
         `;
         renderPipelineActions(`
@@ -602,7 +851,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.textContent = 'SEND TEST';
       }
       pipelineStageContent.innerHTML = `
-        <div class="status-panel error" style="padding: 26px; border: 1px solid rgba(255, 112, 112, 0.45); border-radius: var(--radius-md); background: rgba(28, 16, 16, 0.7);">
+        <div class="status-panel error">
           <span class="section-tag" style="display: inline-block; margin-bottom: 8px;">// TEST TRANSMISSION FAILED</span>
           <h2 class="panel-title" style="margin: 0 0 12px; font-size: 30px;">TEST TRANSMISSION FAILED</h2>
           <p style="color: var(--text-muted);">A network or Gmail API error prevented the test from sending.</p>
@@ -644,54 +893,77 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderJobsGrid(jobs) {
-    if (!jobs || jobs.length === 0) {
-      pastJobsGrid.innerHTML = `
-        <div class="empty-state-card" style="grid-column: 1 / -1; text-align: center; padding: 60px 40px; background: rgba(15, 23, 42, 0.4); border: 1px dashed var(--border-subtle); border-radius: var(--radius-lg);">
-          <div style="font-size: 32px; color: var(--text-dim); margin-bottom: 16px;">⊘</div>
-          <h3 style="font-family: var(--font-heading); font-size: 16px; color: var(--text-main); margin-bottom: 8px;">NO MISSIONS LOGGED</h3>
-          <p style="color: var(--text-muted); font-family: var(--font-mono); font-size: 12px;">SYSTEM STANDBY. READY TO INITIALIZE NEW CAMPAIGN.</p>
+    const sortedJobs = [...jobs].sort((a, b) => b.id - a.id);
+    const activeJobs = sortedJobs.filter(job => job.status !== 'FINAL_SENT');
+    const completedJobs = sortedJobs.filter(job => job.status === 'FINAL_SENT');
+
+    function renderCards(jobsToRender, emptyMessage) {
+      if (jobsToRender.length === 0) {
+        return `
+          <div class="empty-state-card">
+            <h3>${emptyMessage}</h3>
+          </div>
+        `;
+      }
+
+      return jobsToRender.map(job => {
+        const deletable = isJobDeletable(job.status);
+        return `
+        <div class="job-card" data-job-id="${job.id}">
+          <div>
+            <div class="job-card-meta">
+              <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);">MISSION #${job.id}</span>
+              ${getStatusBadgeHtml(job.status)}
+            </div>
+            <h3 class="job-card-title">${escapeHtml(job.event_name)}</h3>
+            <p class="job-card-desc">${escapeHtml(job.event_description)}</p>
+          </div>
+          <div class="job-card-footer">
+            <span>DATE: ${job.event_date}</span>
+            <div style="display: flex; gap: 8px;">
+              ${deletable ? `<button class="btn-mission btn-mission-danger btn-sm delete-job-btn" data-id="${job.id}">DELETE</button>` : ''}
+              <button class="btn-mission btn-mission-secondary btn-sm open-job-btn" data-id="${job.id}">RESUME ➔</button>
+            </div>
+          </div>
         </div>
       `;
-      return;
+      }).join('');
     }
 
-    // Sort descending by ID
-    const sortedJobs = [...jobs].sort((a, b) => b.id - a.id);
-    pastJobsGrid.innerHTML = sortedJobs.map(job => {
-      const deletable = isJobDeletable(job.status);
-      return `
-      <div class="job-card" data-job-id="${job.id}">
-        <div>
-          <div class="job-card-meta">
-            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);">MISSION #${job.id}</span>
-            ${getStatusBadgeHtml(job.status)}
-          </div>
-          <h3 class="job-card-title">${job.event_name}</h3>
-          <p class="job-card-desc">${job.event_description}</p>
-        </div>
-        <div class="job-card-footer">
-          <span>DATE: ${job.event_date}</span>
-          <div style="display: flex; gap: 8px;">
-            ${deletable ? `<button class="btn-mission btn-mission-danger btn-sm delete-job-btn" data-id="${job.id}">DELETE</button>` : ''}
-            <button class="btn-mission btn-mission-secondary btn-sm open-job-btn" data-id="${job.id}">RESUME ➔</button>
-          </div>
-        </div>
-      </div>
-    `}).join('');
+    activeJobsGrid.innerHTML = renderCards(
+      activeJobs,
+      'No active mails. Create a mission to get started.'
+    );
+    completedJobsGrid.innerHTML = renderCards(
+      completedJobs,
+      'No completed mails yet.'
+    );
+    activeJobCount.textContent = String(activeJobs.length);
+    completedJobCount.textContent = String(completedJobs.length);
 
-    document.querySelectorAll('.open-job-btn').forEach(btn => {
+    document.querySelectorAll('#active-jobs-grid .open-job-btn, #completed-jobs-grid .open-job-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const jobId = parseInt(e.target.getAttribute('data-id'), 10);
         loadMissionWorkflow(jobId);
       });
     });
 
-    document.querySelectorAll('.delete-job-btn').forEach(btn => {
+    document.querySelectorAll('#active-jobs-grid .delete-job-btn, #completed-jobs-grid .delete-job-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const jobId = parseInt(e.target.getAttribute('data-id'), 10);
         confirmDeleteJob(jobId);
       });
     });
+  }
+
+  function setMissionView(view) {
+    const showActive = view === 'active';
+    activeJobsSection.classList.toggle('hidden', !showActive);
+    completedJobsSection.classList.toggle('hidden', showActive);
+    activeJobsTab.classList.toggle('active', showActive);
+    completedJobsTab.classList.toggle('active', !showActive);
+    activeJobsTab.setAttribute('aria-pressed', String(showActive));
+    completedJobsTab.setAttribute('aria-pressed', String(!showActive));
   }
 
   async function loadMissionWorkflow(jobId) {
@@ -707,7 +979,7 @@ document.addEventListener('DOMContentLoaded', () => {
           switchView('emailReview', 5);
         } else if (data.job.status === 'EMAIL_APPROVED' || data.job.status.includes('TEST') || data.job.status.includes('FINAL')) {
           renderPipelineStage(data.job);
-          switchView('pipelinePreview', 6);
+          switchView('pipelinePreview', data.job.status === 'TEST_APPROVED' || data.job.status === 'FINAL_SENT' ? 7 : 6);
         } else if (data.job.status === 'CONTEXT_GENERATED' || data.job.status === 'CONTEXT_APPROVED') {
           populateContextEditor(data.job.email_context);
           switchView('contextReview', 3);
@@ -743,7 +1015,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const assetsGrid = document.getElementById('assets-grid');
     if (!assets || assets.length === 0) {
       assetsGrid.innerHTML = `
-        <div class="empty-state-card" style="grid-column: 1 / -1; text-align: center; padding: 60px 40px; background: rgba(15, 23, 42, 0.4); border: 1px dashed var(--border-subtle); border-radius: var(--radius-lg);">
+        <div class="empty-state-card">
           <div style="font-size: 32px; color: var(--text-dim); margin-bottom: 16px;">⊘</div>
           <h3 style="font-family: var(--font-heading); font-size: 16px; color: var(--text-main); margin-bottom: 8px;">NO POSTER ASSETS FOUND</h3>
           <p style="color: var(--text-muted); font-family: var(--font-mono); font-size: 12px;">NO CLOUDINARY POSTERS HAVE BEEN UPLOADED YET.</p>
@@ -1103,6 +1375,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (emailRes.success) {
             state.activeJob.status = emailRes.status;
             state.activeJob.email_html = emailRes.email_html;
+            state.activeJob.has_prior_test_transmission = emailRes.has_prior_test_transmission;
+            state.activeJob.test_sent_version_current = emailRes.test_sent_version_current;
             showToast('Context approved and Email rendered! Advancing to Email Review.');
             populateEmailReview(state.activeJob);
             switchView('emailReview', 5);
@@ -1233,6 +1507,8 @@ document.addEventListener('DOMContentLoaded', () => {
     state.activeJob.email_context = result.email_context;
     state.activeJob.email_html = result.email_html;
     state.activeJob.status = result.status;
+    state.activeJob.has_prior_test_transmission = result.has_prior_test_transmission;
+    state.activeJob.test_sent_version_current = result.test_sent_version_current;
     document.getElementById('email-editor-panel').hidden = true;
     populateEmailReview(state.activeJob);
     showToast('Email changes saved.');
@@ -1244,6 +1520,13 @@ document.addEventListener('DOMContentLoaded', () => {
   function populateEmailReview(job) {
     if (!job) return;
     state.activeJob = job;
+    const reviewNotice = document.getElementById('email-review-notice');
+    reviewNotice.hidden = !job.has_prior_test_transmission;
+    reviewNotice.textContent = !job.has_prior_test_transmission
+      ? ''
+      : job.test_sent_version_current
+        ? 'This email matches a version previously test-transmitted. Reopening review resets final readiness, so this approval cycle still requires a fresh test transmission.'
+        : 'This email has changed since the previous test transmission and has not itself been tested. A fresh approval and test transmission are required before final send.';
 
     // Insert HTML into iframe safely
     if (job.email_html) {
@@ -1285,6 +1568,9 @@ document.addEventListener('DOMContentLoaded', () => {
     btnViewportMobile.classList.remove('active');
     emailIframeWrapper.classList.add('desktop-mode');
     emailIframeWrapper.classList.remove('mobile-mode');
+    emailIframeWrapper.classList.remove('preview-mode-change');
+    void emailIframeWrapper.offsetWidth;
+    emailIframeWrapper.classList.add('preview-mode-change');
   });
 
   btnViewportMobile.addEventListener('click', () => {
@@ -1292,6 +1578,9 @@ document.addEventListener('DOMContentLoaded', () => {
     btnViewportDesktop.classList.remove('active');
     emailIframeWrapper.classList.add('mobile-mode');
     emailIframeWrapper.classList.remove('desktop-mode');
+    emailIframeWrapper.classList.remove('preview-mode-change');
+    void emailIframeWrapper.offsetWidth;
+    emailIframeWrapper.classList.add('preview-mode-change');
   });
 
   // Regenerate Email Action
@@ -1411,6 +1700,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   btnConfirmTestSend.addEventListener('click', submitTestEmailSend);
+  themeToggle.addEventListener('click', () => {
+    setAppTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      regenConfirmModal.classList.remove('active');
+      testConfirmModal.classList.remove('active');
+    }
+  });
 
   gmailConnectBtn.addEventListener('click', () => {
     window.location.href = '/api/gmail/connect';

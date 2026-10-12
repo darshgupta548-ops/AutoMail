@@ -1,5 +1,6 @@
 """Tests for Gmail OAuth sender identity and Gmail transport gating."""
 
+import hashlib
 from types import SimpleNamespace
 
 import pytest
@@ -56,6 +57,26 @@ def _create_rendered_job(client, job_data):
     response = client.post(f"/api/jobs/{job_id}/email/generate")
     assert response.status_code == 200
     return job_id
+
+
+def _mark_test_approved(app, job_id):
+    with app.app_context():
+        from models.email_job import EmailJob
+        job = db.session.get(EmailJob, job_id)
+        email_hash = hashlib.sha256(job.email_html.encode("utf-8")).hexdigest()
+        job.email_approved_hash = email_hash
+        job.test_sent_hash = email_hash
+        job.status = "TEST_APPROVED"
+        db.session.commit()
+
+
+def _mark_email_approved(app, job_id):
+    with app.app_context():
+        from models.email_job import EmailJob
+        job = db.session.get(EmailJob, job_id)
+        job.email_approved_hash = hashlib.sha256(job.email_html.encode("utf-8")).hexdigest()
+        job.status = "EMAIL_APPROVED"
+        db.session.commit()
 
 
 def test_oauth_configuration_validation(monkeypatch):
@@ -135,11 +156,7 @@ def test_stage_05_approval_requires_gmail_sender(client, job_data):
 
 def test_stage_06_test_send_requires_auth_and_configured_recipients(client, app, job_data, monkeypatch):
     job_id = _create_rendered_job(client, job_data)
-    with app.app_context():
-        from models.email_job import EmailJob
-        job = db.session.get(EmailJob, job_id)
-        job.status = "EMAIL_APPROVED"
-        db.session.commit()
+    _mark_email_approved(app, job_id)
 
     with client.session_transaction() as session:
         session["gmail_sender"] = {"email": "brahmand@gmail.com", "token": {"access_token": "abc"}}
@@ -152,11 +169,7 @@ def test_stage_06_test_send_requires_auth_and_configured_recipients(client, app,
 
 def test_stage_07_final_send_requires_auth_and_custom_recipient(client, app, job_data, monkeypatch):
     job_id = _create_rendered_job(client, job_data)
-    with app.app_context():
-        from models.email_job import EmailJob
-        job = db.session.get(EmailJob, job_id)
-        job.status = "TEST_APPROVED"
-        db.session.commit()
+    _mark_test_approved(app, job_id)
 
     with client.session_transaction() as session:
         session["gmail_sender"] = {"email": "brahmand@gmail.com", "token": {"access_token": "abc"}}
@@ -174,23 +187,19 @@ def test_stage_07_final_send_requires_auth_and_custom_recipient(client, app, job
 
 def test_stage_07_accepts_valid_custom_recipient(client, app, job_data, monkeypatch):
     job_id = _create_rendered_job(client, job_data)
-    with app.app_context():
-        from models.email_job import EmailJob
-        job = db.session.get(EmailJob, job_id)
-        job.status = "TEST_APPROVED"
-        db.session.commit()
+    _mark_test_approved(app, job_id)
 
     with client.session_transaction() as session:
         session["gmail_sender"] = {"email": "brahmand@gmail.com", "token": {"access_token": "abc"}}
 
     captured = {}
 
-    def fake_send_batch(sender_identity, job_instance, recipients):
-        captured["recipients"] = list(recipients)
+    def fake_send_final(sender_identity, job_instance, recipient, cc):
+        captured["recipients"] = [recipient, *cc]
         captured["sender"] = sender_identity["email"]
-        return {"success": True, "sent_count": len(recipients), "results": [], "status": "sent"}
+        return {"success": True, "sent_count": 1, "results": [], "status": "sent"}
 
-    monkeypatch.setattr(mail_sender, "send_batch_to_recipients", fake_send_batch)
+    monkeypatch.setattr(mail_sender, "send_final_to_recipients", fake_send_final)
 
     response = client.post(f"/api/jobs/{job_id}/final-send", json={"recipient": "custom@example.com"})
     assert response.status_code == 200
@@ -201,11 +210,7 @@ def test_stage_07_accepts_valid_custom_recipient(client, app, job_data, monkeypa
 
 def test_stage_07_rejects_header_injection_attempt(client, app, job_data):
     job_id = _create_rendered_job(client, job_data)
-    with app.app_context():
-        from models.email_job import EmailJob
-        job = db.session.get(EmailJob, job_id)
-        job.status = "TEST_APPROVED"
-        db.session.commit()
+    _mark_test_approved(app, job_id)
 
     with client.session_transaction() as session:
         session["gmail_sender"] = {"email": "brahmand@gmail.com", "token": {"access_token": "abc"}}
@@ -223,11 +228,7 @@ def test_stage_07_rejects_header_injection_attempt(client, app, job_data):
 
 def test_stage_06_uses_only_test_recipients(client, app, job_data, monkeypatch):
     job_id = _create_rendered_job(client, job_data)
-    with app.app_context():
-        from models.email_job import EmailJob
-        job = db.session.get(EmailJob, job_id)
-        job.status = "EMAIL_APPROVED"
-        db.session.commit()
+    _mark_email_approved(app, job_id)
 
     with client.session_transaction() as session:
         session["gmail_sender"] = {"email": "brahmand@gmail.com", "token": {"access_token": "abc"}}
@@ -306,3 +307,217 @@ def test_send_mime_message_uses_base64url_payload(monkeypatch):
     assert result["success"] is True
     assert result["message_id"] == "123"
     assert service.body["raw"]
+
+
+def test_stage_07_sends_cc_as_a_single_mime_message_and_persists_it(client, app, job_data, monkeypatch):
+    job_id = _create_rendered_job(client, job_data)
+    _mark_test_approved(app, job_id)
+    with client.session_transaction() as session:
+        session["gmail_sender"] = {"email": "sender@example.com", "token": {"access_token": "abc"}}
+    captured = {}
+    def fake_send(sender, job, recipient, cc):
+        captured.update(to=recipient, cc=cc)
+        return {"success": True, "message_id": "sent-1"}
+    monkeypatch.setattr(mail_sender, "send_final_to_recipients", fake_send)
+    response = client.post(f"/api/jobs/{job_id}/final-send", json={
+        "recipient": "main@example.com", "cc": ["copy1@example.com", "copy2@example.com"]
+    })
+    assert response.status_code == 200
+    assert captured == {"to": "main@example.com", "cc": ["copy1@example.com", "copy2@example.com"]}
+    with app.app_context():
+        job = db.session.get(__import__("models.email_job", fromlist=["EmailJob"]).EmailJob, job_id)
+        assert job.final_recipient == "main@example.com"
+        assert job.final_cc == ["copy1@example.com", "copy2@example.com"]
+
+
+@pytest.mark.parametrize("cc", ["bad-address", "attacker@example.com\nBcc:evil@example.com", "main@example.com", "copy@example.com,COPY@example.com", [3]])
+def test_stage_07_rejects_invalid_or_duplicate_cc(client, app, job_data, cc):
+    job_id = _create_rendered_job(client, job_data)
+    _mark_test_approved(app, job_id)
+    with client.session_transaction() as session:
+        session["gmail_sender"] = {"email": "sender@example.com", "token": {"access_token": "abc"}}
+    values = cc.split(",") if isinstance(cc, str) and "," in cc else ([cc] if isinstance(cc, str) else cc)
+    response = client.post(f"/api/jobs/{job_id}/final-send", json={"recipient": "main@example.com", "cc": values})
+    assert response.status_code == 400
+
+
+def test_mime_cc_addresses_are_real_delivery_recipients():
+    message = mail_sender.build_message_for_job(
+        {"email": "sender@example.com", "token": {"access_token": "x"}},
+        SimpleNamespace(email_html="<p>Hi</p>", email_context={"subject": "Hello"}),
+        ["to@example.com"], cc=["copy@example.com"])
+    from services.mime_builder import message_recipients_list
+    assert message["Cc"] == "copy@example.com"
+    assert message_recipients_list(message) == ["to@example.com", "copy@example.com"]
+
+
+def test_recipient_rejects_control_characters_even_at_outer_whitespace():
+    for value in ("\nvictim@example.com", "victim@example.com\t", "victim@example.com\x7f"):
+        with pytest.raises(mail_sender.GmailSenderError, match="header characters"):
+            mail_sender._validate_recipient_email(value)
+
+
+def test_stage_07_recipient_draft_saves_without_sending(client, app, job_data):
+    job_id = _create_rendered_job(client, job_data)
+    _mark_test_approved(app, job_id)
+    with client.session_transaction() as session:
+        session["gmail_sender"] = {"email": "sender@example.com", "token": {"access_token": "abc"}}
+    response = client.put(f"/api/jobs/{job_id}/recipients", json={
+        "recipient": "main@example.com", "cc": ["copy@example.com"]
+    })
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+    job_json = client.get(f"/api/jobs/{job_id}").get_json()["job"]
+    assert job_json["final_recipient"] == "main@example.com"
+    assert job_json["final_cc"] == ["copy@example.com"]
+    assert job_json["status"] == "TEST_APPROVED"
+
+
+def test_stage_07_recipient_draft_keeps_auth_and_validation_gates(client, app, job_data):
+    job_id = _create_rendered_job(client, job_data)
+    _mark_test_approved(app, job_id)
+    assert client.put(f"/api/jobs/{job_id}/recipients", json={"recipient":"main@example.com"}).status_code == 403
+    with client.session_transaction() as session:
+        session["gmail_sender"] = {"email": "sender@example.com", "token": {"access_token": "abc"}}
+    response = client.put(f"/api/jobs/{job_id}/recipients", json={
+        "recipient": "main@example.com", "cc": ["MAIN@example.com"]
+    })
+    assert response.status_code == 400
+
+
+def test_reopened_email_edit_invalidates_approval_and_requires_fresh_test(
+    client, app, job_data, monkeypatch
+):
+    job_id = _create_rendered_job(client, job_data)
+    with client.session_transaction() as session:
+        session["gmail_sender"] = {"email": "sender@example.com", "token": {"access_token": "abc"}}
+    monkeypatch.setattr(mail_sender, "get_test_recipient_emails", lambda: ["test@example.com"])
+    monkeypatch.setattr(
+        mail_sender,
+        "send_batch_to_recipients",
+        lambda *args: {"success": True, "sent_count": 1, "results": [], "status": "sent"},
+    )
+    monkeypatch.setattr(
+        mail_sender,
+        "send_final_to_recipients",
+        lambda *args: {"success": True, "message_id": "final-1"},
+    )
+
+    assert client.post(f"/api/jobs/{job_id}/email/approve").get_json()["success"]
+    assert client.post(f"/api/jobs/{job_id}/test-send").get_json()["success"]
+    assert client.post(f"/api/jobs/{job_id}/test/approve").get_json()["success"]
+
+    reopened = client.post(f"/api/jobs/{job_id}/reopen-review", json={"stage": 5})
+    assert reopened.status_code == 200
+    assert reopened.get_json()["status"] == "EMAIL_RENDERED"
+    assert reopened.get_json()["previous_test_was_sent"] is True
+    assert reopened.get_json()["test_sent_version_current"] is True
+
+    edited = {**reopened.get_json()["email_context"], "headline": "Revised after test"}
+    response = client.put(f"/api/jobs/{job_id}/email/content", json=edited)
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "EMAIL_RENDERED"
+    assert "Revised after test" in response.get_json()["email_html"]
+    assert response.get_json()["has_prior_test_transmission"] is True
+    assert response.get_json()["test_sent_version_current"] is False
+
+    with app.app_context():
+        from models.email_job import EmailJob
+        job = db.session.get(EmailJob, job_id)
+        assert job.email_approved_hash is None
+        assert job.test_sent_hash is not None
+
+    blocked = client.post(
+        f"/api/jobs/{job_id}/final-send",
+        json={"recipient": "recipient@example.com"},
+    )
+    assert blocked.status_code == 400
+    assert "TEST_APPROVED" in blocked.get_json()["error"]
+
+    assert client.post(f"/api/jobs/{job_id}/email/approve").get_json()["success"]
+    final_blocked = client.post(
+        f"/api/jobs/{job_id}/final-send",
+        json={"recipient": "recipient@example.com"},
+    )
+    assert final_blocked.status_code == 400
+
+    assert client.post(f"/api/jobs/{job_id}/test-send").get_json()["success"]
+    assert client.post(f"/api/jobs/{job_id}/test/approve").get_json()["success"]
+    final_response = client.post(
+        f"/api/jobs/{job_id}/final-send",
+        json={"recipient": "recipient@example.com"},
+    )
+    assert final_response.status_code == 200
+    assert final_response.get_json()["status"] == "FINAL_SENT"
+
+
+@pytest.mark.parametrize(
+    ("stage", "expected_status"),
+    [(3, "CONTEXT_GENERATED"), (4, "EMAIL_RENDERED"), (5, "EMAIL_RENDERED")],
+)
+def test_reopen_review_routes_only_supported_pre_send_stages(
+    client, app, job_data, monkeypatch, stage, expected_status
+):
+    job_id = _create_rendered_job(client, job_data)
+    with client.session_transaction() as session:
+        session["gmail_sender"] = {"email": "sender@example.com", "token": {"access_token": "abc"}}
+    monkeypatch.setattr(mail_sender, "get_test_recipient_emails", lambda: ["test@example.com"])
+    monkeypatch.setattr(
+        mail_sender,
+        "send_batch_to_recipients",
+        lambda *args: {"success": True, "sent_count": 1, "results": [], "status": "sent"},
+    )
+    _mark_email_approved(app, job_id)
+    assert client.post(f"/api/jobs/{job_id}/test-send").get_json()["success"]
+    assert client.post(f"/api/jobs/{job_id}/test/approve").get_json()["success"]
+
+    response = client.post(f"/api/jobs/{job_id}/reopen-review", json={"stage": stage})
+    assert response.status_code == 200
+    if stage == 4:
+        assert response.get_json()["status"] == "CONTEXT_APPROVED"
+        rerender = client.post(f"/api/jobs/{job_id}/email/generate")
+        assert rerender.status_code == 200
+        assert rerender.get_json()["status"] == expected_status
+    else:
+        assert response.get_json()["status"] == expected_status
+
+
+def test_final_send_rejects_edited_html_with_stale_approval_hash(client, app, job_data, monkeypatch):
+    job_id = _create_rendered_job(client, job_data)
+    _mark_test_approved(app, job_id)
+    with app.app_context():
+        from models.email_job import EmailJob
+        job = db.session.get(EmailJob, job_id)
+        job.email_html += "<!-- changed after test -->"
+        db.session.commit()
+    with client.session_transaction() as session:
+        session["gmail_sender"] = {"email": "sender@example.com", "token": {"access_token": "abc"}}
+    response = client.post(
+        f"/api/jobs/{job_id}/final-send",
+        json={"recipient": "recipient@example.com"},
+    )
+    assert response.status_code == 400
+    assert "approval and test transmission" in response.get_json()["error"]
+
+
+def test_gmail_api_raw_payload_contains_to_and_cc_delivery_headers(monkeypatch):
+    import base64
+    sender = {"email":"sender@example.com", "token":{"access_token":"abc","refresh_token":"refresh"}}
+    class DummyCreds:
+        valid=True; expired=False; refresh_token="refresh"; token="abc"; expiry=None
+    class FakeCall:
+        body=None
+        def send(self,userId,body): self.body=body; return self
+        def execute(self): return {"id":"cc-1"}
+        def users(self): return self
+        def messages(self): return self
+    service=FakeCall()
+    monkeypatch.setattr(mail_sender,"_credentials_from_token_data",lambda token_data:DummyCreds())
+    monkeypatch.setattr(mail_sender,"build",lambda *args,**kwargs:service)
+    message=mail_sender.build_message_for_job(sender,SimpleNamespace(email_html="<p>Mail</p>",email_context={"subject":"Update"}),["to@example.com"],cc=["copy@example.com"])
+    result=mail_sender.send_mime_message(sender,message)
+    raw=service.body["raw"]
+    decoded=base64.urlsafe_b64decode(raw+"="*((4-len(raw)%4)%4)).decode("utf-8")
+    assert "To: to@example.com" in decoded
+    assert "Cc: copy@example.com" in decoded
+    assert result["recipients"] == ["to@example.com","copy@example.com"]

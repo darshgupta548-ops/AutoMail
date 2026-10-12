@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -26,6 +26,7 @@
         <a href="#" class="nav-link active" id="nav-dashboard">Missions Grid</a>
         <a href="#" class="nav-link" id="nav-assets">ASSETS</a>
         <a href="#" class="nav-link" id="nav-create">+ New Mission</a>
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false">Dark theme</button>
       </nav>
     </header>
 
@@ -40,6 +41,7 @@
         <div class="gmail-status-empty" id="gmail-status-empty">No Gmail sender is connected yet.</div>
         <div class="gmail-status-connected hidden" id="gmail-status-connected">
           <img id="gmail-profile-image" alt="Google account profile" class="gmail-profile-image" />
+          <div class="gmail-avatar-fallback" id="gmail-avatar-fallback" aria-hidden="true">?</div>
           <div class="gmail-account-meta">
             <div class="gmail-account-name" id="gmail-account-name">Google Account</div>
             <div class="gmail-account-email" id="gmail-account-email">not connected</div>
@@ -51,45 +53,45 @@
 
     <!-- MISSION PROGRESS STEPPER -->
     <div class="mission-stepper-wrapper" id="stepper-container">
-      <div class="mission-stepper">
+      <div class="mission-stepper" role="list" aria-label="Seven-stage workflow">
         <div class="stepper-progress-track">
           <div class="stepper-progress-bar" id="stepper-bar"></div>
         </div>
 
-        <button class="step-item active" data-step="1">
+        <div role="listitem" class="step-item active" data-step="1" aria-label="Stage 1: Event" aria-current="step">
           <div class="step-node">01</div>
           <div class="step-label">EVENT</div>
-        </button>
+        </div>
 
-        <button class="step-item" data-step="2">
+        <div role="listitem" class="step-item" data-step="2" aria-label="Stage 2: Context">
           <div class="step-node">02</div>
           <div class="step-label">CONTEXT</div>
-        </button>
+        </div>
 
-        <button class="step-item" data-step="3">
+        <div role="listitem" class="step-item" data-step="3" aria-label="Stage 3: Review">
           <div class="step-node">03</div>
           <div class="step-label">REVIEW</div>
-        </button>
+        </div>
 
-        <button class="step-item" data-step="4">
+        <div role="listitem" class="step-item" data-step="4" aria-label="Stage 4: Build">
           <div class="step-node">04</div>
           <div class="step-label">BUILD</div>
-        </button>
+        </div>
 
-        <button class="step-item" data-step="5">
+        <div role="listitem" class="step-item" data-step="5" aria-label="Stage 5: Verify">
           <div class="step-node">05</div>
           <div class="step-label">VERIFY</div>
-        </button>
+        </div>
 
-        <button class="step-item" data-step="6">
+        <div role="listitem" class="step-item" data-step="6" aria-label="Stage 6: Test">
           <div class="step-node">06</div>
           <div class="step-label">TEST</div>
-        </button>
+        </div>
 
-        <button class="step-item" data-step="7">
+        <div role="listitem" class="step-item" data-step="7" aria-label="Stage 7: Send">
           <div class="step-node">07</div>
           <div class="step-label">SEND</div>
-        </button>
+        </div>
       </div>
     </div>
 
@@ -109,12 +111,26 @@
           <h2 class="panel-title">MISSION LOG</h2>
           <button class="btn-mission btn-mission-primary btn-sm" id="btn-hero-new">CREATE NEW MISSION ➔</button>
         </div>
-        
-        <div class="jobs-grid" id="past-jobs-grid">
-          <!-- Dynamic Job Cards rendered via JS -->
-          <div class="job-card" style="text-align: center; padding: 40px; border: 1px dashed var(--border-subtle); background: transparent;">
-            <p style="color: var(--cyan-primary); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; animation: telemetry-pulse-slow 2s infinite;">SYNCING MISSION LOG...</p>
+        <div class="mission-log-tabs" role="group" aria-label="Filter missions by status">
+          <button class="mission-log-tab active" id="active-jobs-tab" type="button" aria-pressed="true">
+            Active <span id="active-job-count">0</span>
+          </button>
+          <button class="mission-log-tab" id="completed-jobs-tab" type="button" aria-pressed="false">
+            Completed <span id="completed-job-count">0</span>
+          </button>
+        </div>
+        <div class="job-list-section" id="active-jobs-section" role="region" aria-label="Active mails">
+          <div class="jobs-grid" id="active-jobs-grid">
+            <div class="job-card" style="text-align: center; padding: 40px; border: 1px dashed var(--border-subtle); background: transparent;">
+              <p style="color: var(--cyan-primary); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; animation: telemetry-pulse-slow 2s infinite;">SYNCING MISSION LOG...</p>
+            </div>
           </div>
+        </div>
+        <div class="job-list-section completed-jobs-section hidden" id="completed-jobs-section" role="region" aria-label="Completed mails">
+          <div class="jobs-grid" id="completed-jobs-grid"></div>
+        </div>
+        <div class="mission-log-error hidden" id="mission-log-error" role="status">
+          Unable to load missions. Try refreshing the dashboard.
         </div>
       </div>
     </section>
@@ -155,43 +171,43 @@
           <h2 class="panel-title" style="margin-bottom: 20px;">1. EVENT DETAILS</h2>
           <div class="form-grid">
             <div class="form-group">
-              <label class="form-label">EVENT NAME <span class="required">*</span></label>
+              <label class="form-label" for="field-event-name">EVENT NAME <span class="required">*</span></label>
               <input type="text" class="space-input" id="field-event-name" placeholder="e.g., HELIOTRACK 2.0" required>
             </div>
 
             <div class="form-group">
-              <label class="form-label">EVENT DATE <span class="required">*</span></label>
+              <label class="form-label" for="field-event-date">EVENT DATE <span class="required">*</span></label>
               <input type="date" class="space-input" id="field-event-date" required>
             </div>
 
             <div class="form-group">
-              <label class="form-label">START TIME <span class="required">*</span></label>
+              <label class="form-label" for="field-start-time">START TIME <span class="required">*</span></label>
               <input type="time" class="space-input" id="field-start-time" required>
             </div>
 
             <div class="form-group">
-              <label class="form-label">END TIME (OPTIONAL)</label>
+              <label class="form-label" for="field-end-time">END TIME (OPTIONAL)</label>
               <input type="time" class="space-input" id="field-end-time">
             </div>
 
             <div class="form-group">
-              <label class="form-label">VENUE / LOCATION</label>
+              <label class="form-label" for="field-venue">VENUE / LOCATION</label>
               <input type="text" class="space-input" id="field-venue" placeholder="e.g., PDEU Astronomy Observatory">
             </div>
 
             <div class="form-group">
-              <label class="form-label">REGISTRATION LINK</label>
+              <label class="form-label" for="field-reg-url">REGISTRATION LINK</label>
               <input type="url" class="space-input" id="field-reg-url" placeholder="https://example.com/register">
             </div>
           </div>
 
           <div class="form-group" style="margin-top: 20px;">
-            <label class="form-label">EVENT DESCRIPTION <span class="required">*</span></label>
+            <label class="form-label" for="field-description">EVENT DESCRIPTION <span class="required">*</span></label>
             <textarea class="space-textarea" id="field-description" placeholder="Comprehensive event overview, speaker details, activities, and goals..." required></textarea>
           </div>
 
           <div class="form-group" style="margin-top: 20px;">
-            <label class="form-label">WHATSAPP MESSAGE / RAW BROADCAST (OPTIONAL)</label>
+            <label class="form-label" for="field-whatsapp">WHATSAPP MESSAGE / RAW BROADCAST (OPTIONAL)</label>
             <textarea class="space-textarea" id="field-whatsapp" placeholder="Paste raw WhatsApp text or promo copy here for extra context..."></textarea>
           </div>
         </div>
@@ -206,14 +222,14 @@
             <div class="dropzone-area" id="dropzone-poster">
               <div class="dropzone-icon">📷</div>
               <div class="dropzone-text"><strong>EVENT POSTER</strong><br>Click or drag image file</div>
-              <input type="file" id="file-poster" accept="image/*" style="display: none;">
+              <input type="file" id="file-poster" aria-label="Upload event poster" accept="image/*" style="display: none;">
               <div id="poster-preview-container"></div>
             </div>
 
             <div class="dropzone-area" id="dropzone-bg">
               <div class="dropzone-icon">🎨</div>
               <div class="dropzone-text"><strong>EMAIL BACKGROUND (OPTIONAL)</strong><br>Click or drag image file</div>
-              <input type="file" id="file-bg" accept="image/*" style="display: none;">
+              <input type="file" id="file-bg" aria-label="Upload email background image" accept="image/*" style="display: none;">
               <div id="bg-preview-container"></div>
             </div>
           </div>
@@ -250,22 +266,22 @@
           <h2 class="panel-title" style="margin-bottom: 20px;">1. CORE EMAIL COPY</h2>
           
           <div class="form-group" style="margin-bottom: 16px;">
-            <label class="form-label">SUBJECT LINE</label>
+            <label class="form-label" for="edit-ctx-subject">SUBJECT LINE</label>
             <input type="text" class="space-input" id="edit-ctx-subject" required>
           </div>
 
           <div class="form-group" style="margin-bottom: 16px;">
-            <label class="form-label">PREHEADER</label>
+            <label class="form-label" for="edit-ctx-preheader">PREHEADER</label>
             <input type="text" class="space-input" id="edit-ctx-preheader" required>
           </div>
 
           <div class="form-group" style="margin-bottom: 16px;">
-            <label class="form-label">MAIN HEADLINE</label>
+            <label class="form-label" for="edit-ctx-headline">MAIN HEADLINE</label>
             <input type="text" class="space-input" id="edit-ctx-headline" required>
           </div>
 
           <div class="form-group">
-            <label class="form-label">INTRODUCTION</label>
+            <label class="form-label" for="edit-ctx-intro">INTRODUCTION</label>
             <textarea class="space-textarea" id="edit-ctx-intro" required></textarea>
           </div>
         </div>
@@ -288,40 +304,40 @@
           
           <div class="form-grid">
             <div class="form-group">
-              <label class="form-label">EVENT DATE FACT</label>
+              <label class="form-label" for="edit-ctx-date">EVENT DATE FACT</label>
               <input type="text" class="space-input" id="edit-ctx-date" required>
             </div>
 
             <div class="form-group">
-              <label class="form-label">EVENT TIME FACT</label>
+              <label class="form-label" for="edit-ctx-time">EVENT TIME FACT</label>
               <input type="text" class="space-input" id="edit-ctx-time" required>
             </div>
 
             <div class="form-group">
-              <label class="form-label">VENUE FACT</label>
+              <label class="form-label" for="edit-ctx-venue">VENUE FACT</label>
               <input type="text" class="space-input" id="edit-ctx-venue">
             </div>
 
             <div class="form-group">
-              <label class="form-label">REGISTRATION URL</label>
+              <label class="form-label" for="edit-ctx-reg-url">REGISTRATION URL</label>
               <input type="url" class="space-input" id="edit-ctx-reg-url">
             </div>
           </div>
 
           <div class="form-grid" style="margin-top: 20px;">
             <div class="form-group">
-              <label class="form-label">CTA BUTTON LABEL</label>
+              <label class="form-label" for="edit-ctx-cta-label">CTA BUTTON LABEL</label>
               <input type="text" class="space-input" id="edit-ctx-cta-label" required>
             </div>
 
             <div class="form-group">
-              <label class="form-label">CTA BUTTON TARGET URL</label>
+              <label class="form-label" for="edit-ctx-cta-url">CTA BUTTON TARGET URL</label>
               <input type="url" class="space-input" id="edit-ctx-cta-url">
             </div>
           </div>
 
           <div class="form-group" style="margin-top: 20px;">
-            <label class="form-label">CLOSING REMARKS</label>
+            <label class="form-label" for="edit-ctx-closing">CLOSING REMARKS</label>
             <input type="text" class="space-input" id="edit-ctx-closing" required>
           </div>
         </div>
@@ -343,14 +359,15 @@
         <h1 class="editorial-title">EMAIL TRANSMISSION<br><span style="color: var(--text-muted);">REVIEW & VERIFY</span></h1>
         <p class="editorial-subtitle">The communication payload has been rendered. Inspect the final HTML before authorizing transmission.</p>
       </div>
+      <div class="workflow-notice" id="email-review-notice" role="status" hidden></div>
 
 
       <div class="email-editor-panel space-panel" id="email-editor-panel" hidden>
         <div class="space-panel-header"><h2 class="panel-title">EMAIL CONTENT</h2><button type="button" class="btn-mission btn-mission-secondary btn-sm" id="btn-cancel-email-edit">CANCEL</button></div>
         <form id="email-content-form">
-          <div class="form-group"><label class="form-label">SUBJECT</label><input class="space-input" id="email-edit-subject" required></div><div class="form-group"><label class="form-label">PREHEADER</label><input class="space-input" id="email-edit-preheader" required></div><div class="form-group"><label class="form-label">HEADLINE</label><input class="space-input" id="email-edit-headline" required></div><div class="form-group"><label class="form-label">INTRO</label><textarea class="space-textarea" id="email-edit-intro" required></textarea></div>
-          <div class="form-grid"><div class="form-group"><label class="form-label">DATE</label><input class="space-input" id="email-edit-date" required></div><div class="form-group"><label class="form-label">TIME</label><input class="space-input" id="email-edit-time" required></div><div class="form-group"><label class="form-label">VENUE</label><input class="space-input" id="email-edit-venue"></div></div>
-          <div class="form-grid"><div class="form-group"><label class="form-label">CTA LABEL</label><input class="space-input" id="email-edit-cta-label"></div><div class="form-group"><label class="form-label">CTA URL</label><input class="space-input" id="email-edit-cta-url" type="url"></div></div><div class="form-group"><label class="form-label">CLOSING</label><textarea class="space-textarea" id="email-edit-closing" required></textarea></div><div class="form-group"><label class="form-label">CONTACT DETAILS (one contact per line)</label><textarea class="space-textarea" id="email-edit-contacts"></textarea></div><div class="form-group"><label class="form-label">SECTIONS (one section per block: Heading | Body | bullet one | bullet two)</label><textarea class="space-textarea" id="email-edit-sections" required></textarea></div><div class="action-bar"><button type="submit" class="btn-mission btn-mission-primary">SAVE CHANGES</button></div>
+          <div class="form-group"><label class="form-label" for="email-edit-subject">SUBJECT</label><input class="space-input" id="email-edit-subject" required></div><div class="form-group"><label class="form-label" for="email-edit-preheader">PREHEADER</label><input class="space-input" id="email-edit-preheader" required></div><div class="form-group"><label class="form-label" for="email-edit-headline">HEADLINE</label><input class="space-input" id="email-edit-headline" required></div><div class="form-group"><label class="form-label" for="email-edit-intro">INTRO</label><textarea class="space-textarea" id="email-edit-intro" required></textarea></div>
+          <div class="form-grid"><div class="form-group"><label class="form-label" for="email-edit-date">DATE</label><input class="space-input" id="email-edit-date" required></div><div class="form-group"><label class="form-label" for="email-edit-time">TIME</label><input class="space-input" id="email-edit-time" required></div><div class="form-group"><label class="form-label" for="email-edit-venue">VENUE</label><input class="space-input" id="email-edit-venue"></div></div>
+          <div class="form-grid"><div class="form-group"><label class="form-label" for="email-edit-cta-label">CTA LABEL</label><input class="space-input" id="email-edit-cta-label"></div><div class="form-group"><label class="form-label" for="email-edit-cta-url">CTA URL</label><input class="space-input" id="email-edit-cta-url" type="url"></div></div><div class="form-group"><label class="form-label" for="email-edit-closing">CLOSING</label><textarea class="space-textarea" id="email-edit-closing" required></textarea></div><div class="form-group"><label class="form-label" for="email-edit-contacts">CONTACT DETAILS (one contact per line)</label><textarea class="space-textarea" id="email-edit-contacts"></textarea></div><div class="form-group"><label class="form-label" for="email-edit-sections">SECTIONS (one section per block: Heading | Body | bullet one | bullet two)</label><textarea class="space-textarea" id="email-edit-sections" required></textarea></div><div class="action-bar"><button type="submit" class="btn-mission btn-mission-primary">SAVE CHANGES</button></div>
         </form>
       </div>
       <div class="email-review-layout">
@@ -407,7 +424,7 @@
 
           <div class="approval-gate">
             <div class="approval-gate-header">
-              <span style="font-family: var(--font-mono); font-size: 11px; color: #fde047; letter-spacing: 0.1em;">HUMAN VERIFICATION REQUIRED</span>
+              <span class="approval-gate-label">HUMAN VERIFICATION REQUIRED</span>
             </div>
             <div class="approval-gate-body">
               <p>Review the rendered communication before authorizing the next transmission stage.</p>
